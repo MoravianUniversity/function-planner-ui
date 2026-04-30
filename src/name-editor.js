@@ -118,7 +118,8 @@ function functionNameEditor(model, options) {
         if (activeDiagram && activeDiagram.div !== null && div.parentElement === activeDiagram.div) {
             const loc = activeTextBlock.part.getDocumentPoint(go.Spot.TopLeft);
             const pos = activeDiagram.transformDocToView(loc);
-            div.style.transform = 'scale(' + activeDiagram.scale + ')';
+            const scale = activeTextBlock.getDocumentScale() * activeDiagram.scale;
+            div.style.transform = `scale(${scale})`;
             div.style.left = pos.x + 'px';
             div.style.top = pos.y + 'px';
             div.style.minWidth = (activeTextBlock.panel.actualBounds.width+3) + 'px';
