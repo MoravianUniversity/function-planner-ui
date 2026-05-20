@@ -7,6 +7,7 @@ import Swal from 'sweetalert2';
 
 import { wrapWithLabel, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly } from './inspector.js';
 import { loadSVG, makeOption, makeAddButton, makeRemoveButton } from './utils.js';
+import { toEnglishType } from './type-utils.js';
 
 import TypeEditor from './type-editor.js';
 
@@ -378,7 +379,7 @@ function getTypeText(type) {
     return type;
 }
 function addCustomTypeOption(select, type) {
-    const opt = makeOption(type);
+    const opt = makeOption(type, getTypeText(type));
     opt.customType = true;
     opt.setAttribute("data-custom-type", "true");
     select.options.add(opt);
@@ -398,6 +399,12 @@ function setCustomTypeOption(select, type) {
     const matches = [...select.options].filter(opt => opt.value === type);
     if (matches.length === 0) { addCustomTypeOptionToAll(select, type); }
     select.value = type;
+    setTypeSelectTitle(select, type);
+}
+
+function setTypeSelectTitle(select, type) {
+    const englishType = toEnglishType(type);
+    select.title = englishType || 'type';
 }
 function getAllSpecialTypes(model, options) {
     const allSpecialTypes = new Set();
@@ -426,6 +433,7 @@ function makeTypeElement(model, options) {
     for (const t of getAllSpecialTypes(model, options)) {
         addCustomTypeOption(select, t);
     }
+    setTypeSelectTitle(select, select.value);
 
     // edit button
     const button = document.createElement("button");
@@ -442,11 +450,14 @@ async function showTypeBuilder(options, initialType) {
     const returnValue = await Swal.fire({
         theme: options.theme,
         title: "Create Type",
-        html: "<div class='func-planner-type-builder'></div>",
+        html: "<div class='func-planner-type-builder-wrap'><div class='func-planner-type-current'></div><div class='func-planner-type-builder'></div></div>",
         showCancelButton: true,
         willOpen: (popup) => {
+            const currentType = popup.querySelector('.func-planner-type-current');
             const content = popup.querySelector('.func-planner-type-builder');
+            currentType.textContent = initialType.trim() || '?';
             function onChange(value) {
+                currentType.textContent = value || '?';
                 if (!value.includes('?')) {
                     result = value;
                     Swal.getConfirmButton().disabled = false;

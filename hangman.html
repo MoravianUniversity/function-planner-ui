@@ -29,7 +29,7 @@
                 name: "read_words",
                 desc: "Read all of the words from the given file into a list.",
                 params: [{"name": "filename", "type": "str", "desc": "the name of the file to get the words from"}],
-                returns: [{"type": "list of str", "desc": "the words from the file"}],
+                returns: [{"type": "list[str]", "desc": "the words from the file"}],
                 code: "with open(filename) as file:\n    return file.read().split()",
             },
             {

@@ -23,7 +23,7 @@
  * @example
  * // With initial type
  * const editor = new TypeEditor(document.getElementById('editor'), {
- *     initialType: 'list of tuple with int and str'
+ *     initialType: 'list[tuple[int, str]]'
  * });
  * 
  * @example
@@ -35,12 +35,12 @@
  * @example
  * // Getting the current type
  * const currentType = editor.getTypeString();
- * console.log(currentType); // e.g., "list of tuple with int and str"
+ * console.log(currentType); // e.g., "list[tuple[int, str]]"
  * 
  * @example
  * // Setting from a string
  * try {
- *     editor.setTypeString('dict with keys of str associated with values of int');
+ *     editor.setTypeString('dict[str, int]');
  * } catch (error) {
  *     console.error('Parse error:', error.message);
  * }
@@ -86,7 +86,7 @@ class TypeEditor {
      * @example
      * // With initial type
      * const editor = new TypeEditor(document.getElementById('my-editor'), {
-     *     initialType: 'list of tuple with int and str'
+     *     initialType: 'list[tuple[int, str]]'
      * });
      * 
      * @example
@@ -94,7 +94,7 @@ class TypeEditor {
      * const editor = new TypeEditor(document.getElementById('my-editor'), {
      *     onChange: (typeString) => console.log(typeString),
      *     allowedTypes: ['int', 'str', 'list'],
-     *     initialType: 'list of int'
+     *     initialType: 'list[int]'
      * });
      */
     // Private fields
@@ -141,22 +141,21 @@ class TypeEditor {
     }
     
     /**
-     * Gets the current type as an English string
+     * Gets the current type as a Python string
      * 
-     * Returns a human-readable string representation of the currently
-     * constructed type. The string uses natural language syntax like
-     * "list of int" or "tuple with int, str, and float".
+     * Returns a Python annotation string representation of the currently
+     * constructed type. For example "list[int]" or "tuple[int, str, float]".
      * 
      * @returns {string} The current type as a string, or empty string if no type is set
      * 
      * @example
      * const typeString = editor.getTypeString();
-     * console.log(typeString); // "list of int"
+     * console.log(typeString); // "list[int]"
      * 
      * @example
      * // Complex nested type
      * const typeString = editor.getTypeString();
-     * console.log(typeString); // "dict with keys of str associated with values of (list of int)"
+     * console.log(typeString); // "dict[str, int]"
      */
     getTypeString() {
         const rootContainer = this.#element.querySelector('.type-container');
@@ -204,36 +203,36 @@ class TypeEditor {
     /**
      * Parses and sets the editor from a type string
      * 
-     * Parses an English type string and rebuilds the editor to match.
+     * Parses a Python type string and rebuilds the editor to match.
      * Supports multiple syntax variations for convenience, including
      * bare container type names.
      * 
      * @param {string} typeStr - The type string to parse. Must be a valid type expression
-     *                           in English format (e.g., "list of int", "tuple with int and str")
+     *                           in Python format (e.g., "list[int]", "tuple[int, str]")
      * 
      * @throws {Error} If the type string cannot be parsed
      * 
      * @example
      * // Simple type
-     * editor.setTypeString('list of int');
+     * editor.setTypeString('list[int]');
      * 
      * @example
      * // Bare container types (uses default nested type)
-     * editor.setTypeString('list');   // becomes "list of int"
-     * editor.setTypeString('tuple');  // becomes "tuple with int"
-     * editor.setTypeString('set');    // becomes "set of int"
-     * editor.setTypeString('dict');   // becomes "dict with keys of int associated with values of int"
+     * editor.setTypeString('list');   // becomes "list[int]"
+     * editor.setTypeString('tuple');  // becomes "tuple[int]"
+     * editor.setTypeString('set');    // becomes "set[int]"
+     * editor.setTypeString('dict');   // becomes "dict[str, int]"
      * 
      * @example
      * // Nested container types
-     * editor.setTypeString('list of tuple with int, str, and float');
+     * editor.setTypeString('list[tuple[int, str]]');
      * 
      * @example
      * // Dict with various syntaxes
-     * editor.setTypeString('dict with keys of str associated with values of int');
-     * editor.setTypeString('dict with keys of int and values of str');
-     * editor.setTypeString('dict of int to str');
-     * editor.setTypeString('dict of list of int');  // assumes str keys
+     * editor.setTypeString('dict[str, int]');
+     * editor.setTypeString('dict[int, str]');
+     * editor.setTypeString('dict[int, str]');
+     * editor.setTypeString('dict[list[int]]');  // assumes str keys
      * 
      * @example
      * // With error handling
@@ -245,7 +244,7 @@ class TypeEditor {
      * 
      * @example
      * // Complex nested types with parentheses
-     * editor.setTypeString('tuple with (list of int), str, and (set of float)');
+     * editor.setTypeString('tuple[list[int], str, set[float]]');
      */
     setTypeString(typeStr) {
         try {
@@ -625,21 +624,6 @@ class TypeEditor {
         });
     }
 
-    #needsParentheses(typeString) {
-        // Check if the type string contains mode keywords that need disambiguation
-        return typeString.includes(' of ') || typeString.includes(' with ');
-    }
-
-    #formatWithList(types) {
-        // Format a list of types with commas and trailing "and"
-        if (types.length === 0) return '';
-        if (types.length === 1) return types[0];
-        if (types.length === 2) return `${types[0]} and ${types[1]}`;
-        // For 3 or more, use commas with trailing "and"
-        const allButLast = types.slice(0, -1).join(', ');
-        return `${allButLast}, and ${types[types.length - 1]}`;
-    }
-
     #generateTypeString(container) {
         const select = container.querySelector('select');
         const selectedType = select.value;
@@ -661,21 +645,18 @@ class TypeEditor {
         }
 
         if (selectedType === 'set') {
-            // Set only supports 'of' mode
             const nestedWrapper = container.querySelector('.indented-nested');
             if (nestedWrapper) {
                 const nestedContainer = nestedWrapper.querySelector('.type-container');
                 if (nestedContainer) {
                     const nestedType = this.#generateTypeString(nestedContainer);
-                    const wrappedType = this.#needsParentheses(nestedType) ? `(${nestedType})` : nestedType;
-                    return `set of ${wrappedType}`;
+                    return `set[${nestedType}]`;
                 }
             }
-            return 'set of ?';
+            return 'set[?]';
         }
 
         if (selectedType === 'dict') {
-            // Dict has two sections: keys and values
             const nestedWrappers = Array.from(container.children).filter(child => 
                 child.classList && child.classList.contains('indented-nested')
             );
@@ -696,11 +677,8 @@ class TypeEditor {
                     }
                 }
             });
-            
-            const wrappedKeyType = this.#needsParentheses(keyType) ? `(${keyType})` : keyType;
-            const wrappedValueType = this.#needsParentheses(valueType) ? `(${valueType})` : valueType;
-            
-            return `dict with keys of ${wrappedKeyType} associated with values of ${wrappedValueType}`;
+
+            return `dict[${keyType}, ${valueType}]`;
         }
 
         if (selectedType === 'list' || selectedType === 'tuple') {
@@ -713,13 +691,17 @@ class TypeEditor {
                     const nestedContainer = nestedWrapper.querySelector('.type-container');
                     if (nestedContainer) {
                         const nestedType = this.#generateTypeString(nestedContainer);
-                        const wrappedType = this.#needsParentheses(nestedType) ? `(${nestedType})` : nestedType;
-                        return `${selectedType} of ${wrappedType}`;
+                        if (selectedType === 'tuple') {
+                            return `tuple[${nestedType}, ...]`;
+                        }
+                        return `${selectedType}[${nestedType}]`;
                     }
                 }
-                return `${selectedType} of ?`;
+                if (selectedType === 'tuple') {
+                    return 'tuple[?, ...]';
+                }
+                return `${selectedType}[?]`;
             } else {
-                // "with" mode - collect types from indented wrappers
                 const nestedWrappers = Array.from(container.children).filter(child => 
                     child.classList && child.classList.contains('indented-nested')
                 );
@@ -728,13 +710,11 @@ class TypeEditor {
                     const types = nestedWrappers.map(wrapper => {
                         const typeContainer = wrapper.querySelector('.type-container');
                         if (!typeContainer) return '?';
-                        const typeString = this.#generateTypeString(typeContainer);
-                        // Add parentheses to child types in "with" if they contain mode keywords
-                        return this.#needsParentheses(typeString) ? `(${typeString})` : typeString;
+                        return this.#generateTypeString(typeContainer);
                     });
-                    return `${selectedType} with ${this.#formatWithList(types)}`;
+                    return `${selectedType}[${types.join(', ')}]`;
                 }
-                return `${selectedType} with ?`;
+                return `${selectedType}[?]`;
             }
         }
 
@@ -743,261 +723,142 @@ class TypeEditor {
 
     // Private: Parser functions
     #parseTypeString(typeStr) {
-        typeStr = typeStr.trim();
-        
-        // Check for base types
-        if (this.#baseTypes.includes(typeStr)) {
-            return { type: typeStr };
+        typeStr = (typeStr || '').trim();
+
+        if (typeStr === '?' || typeStr === '') {
+            return { type: '' };
         }
-        
-        // Check for bare container types (e.g., just "list", "tuple", "set", "dict")
-        if (this.#containerTypes.includes(typeStr)) {
-            const defaultBaseType = this.#baseTypes.length > 0 ? this.#baseTypes[0] : 'int';
-            
-            if (typeStr === 'list') {
+
+        const splitTopLevelCommas = (text) => {
+            const parts = [];
+            let current = '';
+            let depthBracket = 0;
+            let depthParen = 0;
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (ch === '[') depthBracket++;
+                else if (ch === ']') depthBracket--;
+                else if (ch === '(') depthParen++;
+                else if (ch === ')') depthParen--;
+
+                if (ch === ',' && depthBracket === 0 && depthParen === 0) {
+                    parts.push(current.trim());
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            if (current.trim()) { parts.push(current.trim()); }
+            return parts;
+        };
+
+        const findOuterGeneric = (text) => {
+            const firstBracket = text.indexOf('[');
+            if (firstBracket === -1) {
+                return { base: text.trim(), inner: null };
+            }
+            if (!text.endsWith(']')) {
+                throw new Error(`Invalid generic type: ${text}`);
+            }
+            let depth = 0;
+            for (let i = firstBracket; i < text.length; i++) {
+                if (text[i] === '[') depth++;
+                else if (text[i] === ']') depth--;
+                if (depth === 0 && i !== text.length - 1) {
+                    throw new Error(`Invalid generic type: ${text}`);
+                }
+            }
+            if (depth !== 0) {
+                throw new Error(`Unmatched brackets in type: ${text}`);
+            }
+            return {
+                base: text.slice(0, firstBracket).trim(),
+                inner: text.slice(firstBracket + 1, -1).trim()
+            };
+        };
+
+        const parsePython = (text) => {
+            const { base, inner } = findOuterGeneric(text.trim());
+
+            if (inner == null) {
+                if (this.#baseTypes.includes(base)) {
+                    return { type: base };
+                }
+                if (base === 'list') {
+                    return { type: 'list', mode: 'of', nested: { type: '' } };
+                }
+                if (base === 'set') {
+                    return { type: 'set', mode: 'of', nested: { type: '' } };
+                }
+                if (base === 'tuple') {
+                    return { type: 'tuple', mode: 'with', types: [{ type: '' }, { type: '' }] };
+                }
+                if (base === 'dict') {
+                    return { type: 'dict', keyType: { type: '' }, valueType: { type: '' } };
+                }
+
+                if (this.#allTypes.includes('custom') && (this.#isValidCustomTypeName(base) || base === 'custom')) {
+                    return {
+                        type: 'custom',
+                        customValue: base === 'custom' ? '' : base
+                    };
+                }
+
+                throw new Error(`Unknown type: ${base}`);
+            }
+
+            const args = splitTopLevelCommas(inner);
+
+            if (base === 'list') {
+                if (args.length <= 1) {
+                    return {
+                        type: 'list',
+                        mode: 'of',
+                        nested: args.length === 1 ? parsePython(args[0]) : { type: '' }
+                    };
+                }
                 return {
                     type: 'list',
-                    mode: 'of',
-                    nested: { type: '' }
-                };
-            } else if (typeStr === 'tuple') {
-                return {
-                    type: 'tuple',
                     mode: 'with',
-                    types: [{ type: '' }, { type: '' }]
+                    types: args.map(parsePython)
                 };
-            } else if (typeStr === 'set') {
+            }
+
+            if (base === 'set') {
                 return {
                     type: 'set',
                     mode: 'of',
-                    nested: { type: '' }
+                    nested: args.length ? parsePython(args[0]) : { type: '' }
                 };
-            } else if (typeStr === 'dict') {
+            }
+
+            if (base === 'tuple') {
+                if (args.length === 2 && args[1] === '...') {
+                    return {
+                        type: 'tuple',
+                        mode: 'of',
+                        nested: parsePython(args[0])
+                    };
+                }
+                return {
+                    type: 'tuple',
+                    mode: 'with',
+                    types: args.length ? args.map(parsePython) : [{ type: '' }, { type: '' }]
+                };
+            }
+
+            if (base === 'dict') {
                 return {
                     type: 'dict',
-                    keyType: { type: '' },
-                    valueType: { type: '' }
+                    keyType: args[0] ? parsePython(args[0]) : { type: '' },
+                    valueType: args[1] ? parsePython(args[1]) : { type: '' }
                 };
             }
-        }
-        
-        // Parse container types with modifiers
-        for (const containerType of this.#containerTypes) {
-            if (typeStr.startsWith(containerType + ' ')) {
-                const rest = typeStr.substring(containerType.length + 1).trim();
-                
-                if (containerType === 'set') {
-                    // Set only supports "of"
-                    if (rest.startsWith('of ')) {
-                        const nested = rest.substring(3).trim();
-                        return {
-                            type: 'set',
-                            mode: 'of',
-                            nested: this.#parseTypeString(this.#stripParentheses(nested))
-                        };
-                    }
-                } else if (containerType === 'dict') {
-                    // Dict has multiple syntax options
-                    if (rest.startsWith('with ')) {
-                        const dictContent = rest.substring(5).trim();
-                        
-                        // Check for "with values of X" (str keys assumed)
-                        if (dictContent.startsWith('values of ')) {
-                            const valueTypeStr = dictContent.substring(10).trim();
-                            return {
-                                type: 'dict',
-                                keyType: { type: 'str' },
-                                valueType: this.#parseTypeString(this.#stripParentheses(valueTypeStr))
-                            };
-                        }
-                        
-                        // Parse "with keys of X ..."
-                        if (dictContent.startsWith('keys of ')) {
-                            const afterKeysOf = dictContent.substring(8);
-                            // Find separator: "associated with values of" or "and values of"
-                            let depth = 0;
-                            let splitIndex = -1;
-                            let searchPhrase = null;
-                            
-                            // Try both separators
-                            const separators = ['associated with values of ', 'and values of '];
-                            
-                            for (const sep of separators) {
-                                depth = 0;
-                                for (let i = 0; i < afterKeysOf.length; i++) {
-                                    const char = afterKeysOf[i];
-                                    if (char === '(') depth++;
-                                    else if (char === ')') depth--;
-                                    
-                                    if (depth === 0 && afterKeysOf.substring(i, i + sep.length) === sep) {
-                                        splitIndex = i;
-                                        searchPhrase = sep;
-                                        break;
-                                    }
-                                }
-                                if (splitIndex !== -1) break;
-                            }
-                            
-                            if (splitIndex !== -1 && searchPhrase) {
-                                const keyTypeStr = afterKeysOf.substring(0, splitIndex).trim();
-                                const valueTypeStr = afterKeysOf.substring(splitIndex + searchPhrase.length).trim();
-                                
-                                return {
-                                    type: 'dict',
-                                    keyType: this.#parseTypeString(this.#stripParentheses(keyTypeStr)),
-                                    valueType: this.#parseTypeString(this.#stripParentheses(valueTypeStr))
-                                };
-                            }
-                        }
-                    } else if (rest.startsWith('of ')) {
-                        // "dict of X" (str keys) or "dict of X to Y"
-                        const afterOf = rest.substring(3).trim();
-                        
-                        // Look for " to " separator
-                        let depth = 0;
-                        let splitIndex = -1;
-                        const searchPhrase = ' to ';
-                        
-                        for (let i = 0; i < afterOf.length; i++) {
-                            const char = afterOf[i];
-                            if (char === '(') depth++;
-                            else if (char === ')') depth--;
-                            
-                            if (depth === 0 && afterOf.substring(i, i + searchPhrase.length) === searchPhrase) {
-                                splitIndex = i;
-                                break;
-                            }
-                        }
-                        
-                        if (splitIndex !== -1) {
-                            // "dict of X to Y"
-                            const keyTypeStr = afterOf.substring(0, splitIndex).trim();
-                            const valueTypeStr = afterOf.substring(splitIndex + searchPhrase.length).trim();
-                            
-                            return {
-                                type: 'dict',
-                                keyType: this.#parseTypeString(this.#stripParentheses(keyTypeStr)),
-                                valueType: this.#parseTypeString(this.#stripParentheses(valueTypeStr))
-                            };
-                        } else {
-                            // "dict of X" (assumes str keys)
-                            return {
-                                type: 'dict',
-                                keyType: { type: 'str' },
-                                valueType: this.#parseTypeString(this.#stripParentheses(afterOf))
-                            };
-                        }
-                    }
-                } else if (containerType === 'list' || containerType === 'tuple') {
-                    if (rest.startsWith('of ')) {
-                        const nested = rest.substring(3).trim();
-                        return {
-                            type: containerType,
-                            mode: 'of',
-                            nested: this.#parseTypeString(this.#stripParentheses(nested))
-                        };
-                    } else if (rest.startsWith('with ')) {
-                        const nested = rest.substring(5).trim();
-                        const types = this.#parseWithClause(nested);
-                        return {
-                            type: containerType,
-                            mode: 'with',
-                            types: types.map(t => this.#parseTypeString(this.#stripParentheses(t)))
-                        };
-                    }
-                }
-            }
-        }
-        
-        // Check if it's a custom type (valid identifier, not a built-in type)
-        // Only if "custom" is in allowedTypes
-        if (this.#allTypes.includes('custom') && (this.#isValidCustomTypeName(typeStr) || typeStr === 'custom')) {
-            return {
-                type: 'custom',
-                customValue: typeStr === 'custom' ? '' : typeStr.trim()
-            };
-        }
-        
-        throw new Error(`Unable to parse type: ${typeStr}`);
-    }
 
-    #stripParentheses(str) {
-        str = str.trim();
-        if (str.startsWith('(') && str.endsWith(')')) {
-            // Make sure these are matching outer parentheses
-            let depth = 0;
-            for (let i = 0; i < str.length; i++) {
-                if (str[i] === '(') depth++;
-                if (str[i] === ')') depth--;
-                if (depth === 0 && i < str.length - 1) {
-                    // Found closing paren before end, these aren't outer parens
-                    return str;
-                }
-            }
-            return str.substring(1, str.length - 1).trim();
-        }
-        return str;
-    }
+            throw new Error(`Unsupported generic type: ${base}`);
+        };
 
-    #parseWithClause(str) {
-        // Parse "type1, type2, and type3" or "type1 and type2" or mixed
-        // Split by commas and/or "and" while respecting parentheses
-        const types = [];
-        let current = '';
-        let depth = 0;
-        let i = 0;
-        
-        while (i < str.length) {
-            const char = str[i];
-            
-            if (char === '(') {
-                depth++;
-                current += char;
-                i++;
-            } else if (char === ')') {
-                depth--;
-                current += char;
-                i++;
-            } else if (depth === 0) {
-                // Check for comma
-                if (char === ',') {
-                    if (current.trim()) {
-                        types.push(current.trim());
-                    }
-                    current = '';
-                    i++;
-                    continue;
-                }
-                
-                // Check for " and " (with spaces) - treat as separator
-                if (str.substring(i, i + 5) === ' and ') {
-                    if (current.trim()) {
-                        types.push(current.trim());
-                    }
-                    current = '';
-                    i += 5; // Skip " and "
-                    continue;
-                }
-                
-                // Check for "and " at start (after comma/and)
-                if (current.trim() === '' && str.substring(i, i + 4) === 'and ') {
-                    i += 4; // Skip "and "
-                    continue;
-                }
-                
-                current += char;
-                i++;
-            } else {
-                current += char;
-                i++;
-            }
-        }
-        
-        if (current.trim()) {
-            types.push(current.trim());
-        }
-        
-        return types;
+        return parsePython(typeStr);
     }
 
     #buildTypeFromParsed(parsed, parentElement) {

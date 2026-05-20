@@ -70,34 +70,20 @@ function indentText(text, indent=4) {
     return text.split("\n").map(line => indent + line).join("\n");
 }
 
-function splitOnMatchingParen(str) {
-    let stack = [];
-    for (let i = 0; i < str.length; i++) {
-        const char = str[i];
-        if (char === '(') {
-            stack.push(i);
-        } else if (char === ')') {
-            const matchIndex = stack.pop();
-            if (matchIndex === 0) {
-                return [str.slice(1, i).trim(), str.slice(i + 1).trim()];
-            }
-        }
-    }
-    return [null, str];
-}
-function splitOnCommasIgnoringParens(str) {
+const matchChars = { '(': ')', '[': ']', '{': '}' };
+function splitAtTopLevel(str) {
+    const stack = [];
     const results = [];
     let current = '';
-    let parenDepth = 0;
     for (let i = 0; i < str.length; i++) {
         const char = str[i];
-        if (char === '(') {
-            parenDepth++;
+        if (char === '(' || char === '[' || char === '{') {
+            stack.push(matchChars[char]);
             current += char;
-        } else if (char === ')') {
-            parenDepth--;
+        } else if (char === stack[stack.length - 1]) {
+            stack.pop();
             current += char;
-        } else if (char === ',' && parenDepth === 0) {
+        } else if (char === ',' && stack.length === 0) {
             // Split here - comma is not inside parentheses
             results.push(current.trim());
             current = '';
@@ -108,36 +94,6 @@ function splitOnCommasIgnoringParens(str) {
     // Add the last part
     if (current) { results.push(current.trim()); }
     return results;
-}
-function removeOuterParens(text) {
-    text = text.trim();
-    if (text.startsWith("(") && text.endsWith(")")) {
-        let [part, rest] = splitOnMatchingParen(text);
-        if (rest === "") { return part; }
-    }
-    return text;
-}
-function normalizeString(text) {
-    return removeOuterParens(text.trim().replace(/\s+/g, ' '));
-}
-function mapList(text, fn) {
-    text = normalizeString(text);
-    text = text.replace(/, ?and\b/, ',').replace(/ and\b/, ', ');  // normalize "and"s to commas
-    return splitOnCommasIgnoringParens(text).map(x => fn(x.trim(), true)).join(", ");
-}
-
-function processDictType(type, fn) {
-    type = type.slice(10);
-    let [key, value] = type.split(" associated with ");  // TODO: nested
-    if (key.startsWith("keys of ")) { key = key.slice(8); }
-    if (value.startsWith("values of ")) { value = value.slice(10); }
-    return [fn(key, true), fn(value, true)];
-}
-function processPlural(type) {
-    // first word can be ints, floats, strs, bools, tuples, dicts, sets
-    let parts = type.split(" ");
-    if (parts[0].endsWith("s")) { parts[0] = parts[0].slice(0, -1); } // remove trailing 's' for plural types
-    return parts.join(" ");
 }
 
 const DEFAULT_VALUES = {
@@ -150,39 +106,40 @@ const DEFAULT_VALUES = {
     "dict": "{}",
     "set": "set()",
 }
-function defaultReturnValue(type, plural=false) {
-    type = normalizeString(type);
-    if (plural) { type = processPlural(type); }
+function defaultReturnValue(type) {
+    type = type.replace(" ", "");
     if (DEFAULT_VALUES[type]) { return DEFAULT_VALUES[type]; }
-    if (type.startsWith("list of ")) { return `[${defaultReturnValue(type.slice(8), true)}]`; }
-    if (type.startsWith("list with ")) { return `[${mapList(type.slice(10), defaultReturnValue)}]`; }
-    if (type.startsWith("tuple of ")) { return `(${defaultReturnValue(type.slice(9), true)},)`; }
-    if (type.startsWith("tuple with ")) { return `(${mapList(type.slice(11), defaultReturnValue)})`; }
-    if (type.startsWith("dict of ")) { return `{"": ${defaultReturnValue(type.slice(8), true)}}`; }
-    if (type.startsWith("dict with ")) { return `{${processDictType(type, defaultReturnValue).join(": ")}}`; }
-    if (type.startsWith("set of ")) { return `{${defaultReturnValue(type.slice(7), true)}}`; }
+    if (type.startsWith("list[") && type.endsWith("]")) {
+        const subtypes = splitAtTopLevel(type.slice(5, -1));
+        return `[${subtypes.map(sub => defaultReturnValue(sub)).join(", ")}]`;
+    }
+    if (type.startsWith("tuple[") && type.endsWith("]")) {
+        const subtypes = splitAtTopLevel(type.slice(6, -1));
+        if (subtypes.length === 1) { return `(${defaultReturnValue(subtypes[0])},)`; }
+        if (subtypes.length === 2 && subtypes[1] === "...") { return `(${defaultReturnValue(subtypes[0])}, ${defaultReturnValue(subtypes[0])})`; }
+        return `(${subtypes.map(sub => defaultReturnValue(sub)).join(", ")})`;
+    }
+    if (type.startsWith("dict[") && type.endsWith("]")) {
+        const subtypes = splitAtTopLevel(type.slice(5, -1));
+        if (subtypes.length === 1) { return `{${defaultReturnValue(subtypes[0])}: None}`; }
+        if (subtypes.length === 2) { return `{${defaultReturnValue(subtypes[0])}: ${defaultReturnValue(subtypes[1])}}`; }
+        return "{}";
+    }
+    if (type.startsWith("set[") && type.endsWith("]")) {
+        const subtypes = splitAtTopLevel(type.slice(4, -1));
+        if (subtypes.length === 0) { return "set()"; }
+        if (subtypes.length === 1) { return `{${defaultReturnValue(subtypes[0])}}`; }
+        return "set()";
+    }
     return "None";
 }
-function typeToPython(type, plural=false) {
-    type = normalizeString(type);
-    if (plural) { type = processPlural(type); }
-    if (type.startsWith("list of ")) { return `list[${typeToPython(type.slice(8), true)}]`; }  // homogeneous list
-    if (type.startsWith("list with ")) { return `list[${mapList(type.slice(10), typeToPython)}]`; }  // heterogeneous list (technically not supported in Python)
-    if (type.startsWith("tuple of ")) { return `tuple[${typeToPython(type.slice(9), true)}, ...]`; }  // homogeneous tuple
-    if (type.startsWith("tuple with ")) { return `tuple[${mapList(type.slice(11), typeToPython)}]`; }  // heterogeneous tuple
-    if (type.startsWith("dict of ")) { return `dict[str, ${typeToPython(type.slice(8), true)}]`; }  // dict with keys as strings
-    if (type.startsWith("dict with ")) { return `dict[${processDictType(type, typeToPython).join(", ")}]`; }  // dict with specified key and value types
-    if (type.startsWith("set of ")) { return `set[${typeToPython(type.slice(7), true)}]`; }  // homogeneous set
-    return type;
-}
-
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 function letter(n) { return ALPHABET.charAt(n % ALPHABET.length); }
 function getParam(param, i, withTypes=true) {
     let name = (param.name || letter(i)).trim();
     if (!withTypes || !param.type) { return name; }
-    return `${name}: ${typeToPython(param.type)}`;
+    return `${name}: ${param.type}`;
 }
 /**
  * Generates a Python function definition line.
@@ -197,7 +154,7 @@ export function pythonDefLine(name, params, returns, withTypes=true, simple=fals
     const paramsDef = params.map((p, i) => getParam(p, i, withTypes));
     let returnDef = "";
     if (withTypes && returns.length > 0) {
-        const returnTypes = returns.map(ret => ret.type ? typeToPython(ret.type) : "object");
+        const returnTypes = returns.map(ret => ret.type ? ret.type : "object");
         returnDef = " -> " + ((returns.length === 1) ? returnTypes[0] : `tuple[${returnTypes.join(", ")}]`);
     }
     const def = `${name}(${paramsDef.join(", ")})${returnDef}`;
