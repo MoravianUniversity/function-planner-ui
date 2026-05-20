@@ -73,6 +73,7 @@ function functionNameEditor(model, options) {
     div.className = 'function-name-editor';
     const input = document.createElement('input');
     input.type = 'text';
+    input.writingSuggestions = 'false';
     // Adding these overrides the titles I provide for errors
     //input.required = true;
     //input.pattern = '[a-zA-Z_][a-zA-Z0-9_]*';

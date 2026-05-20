@@ -102,6 +102,7 @@ function makeAuthorNames(model, options, funcs) {
         input.placeholder = 'Author name...';
         input.value = name;
         input.readOnly = readOnly;
+        input.writingSuggestions = 'false';
         input.ariaLabelledByElements = [label];
         input.addEventListener('input', () => {
             if (input.value.startsWith(' ')) {

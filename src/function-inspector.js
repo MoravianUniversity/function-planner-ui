@@ -93,6 +93,7 @@ function makeFuncName(funcs) {
     input.placeholder = 'function';
     input.required = true;
     input.pattern = '[a-zA-Z_][a-zA-Z0-9_]*';
+    input.writingSuggestions = 'false';
     const h2 = document.createElement('h2');
     h2.appendChild(input);
 
@@ -482,10 +483,11 @@ function makeDragHandle() {
 function makeNameElement() {
     const name = document.createElement("input");
     name.type = "text";
-    name.className = "func-var-name";``
+    name.className = "func-var-name";
     name.placeholder = "name";
     name.required = true;
     name.pattern = "[a-zA-Z_][a-zA-Z0-9_]*";
+    name.writingSuggestions = 'false';
     return name;
 }
 function makeDescElement() {
