@@ -109,9 +109,9 @@ const DEFAULT_VALUES = {
 }
 function defaultReturnValue(type) {
     type = type.replace(/\s+/g, "");
-    union = splitAtTopLevel(type, separator='|');
+    const union = splitAtTopLevel(type, '|');
     if (union.length === 0) { return "None"; }
-    if (union.length > 1) { return union.includes("None") ? defaultReturnValue(union[0]) : union[0]; }
+    if (union.length > 1) { return union.includes("None") ? "None" : defaultReturnValue(union[0]); }
     if (DEFAULT_VALUES[type]) { return DEFAULT_VALUES[type]; }
     if (type.startsWith("list[") && type.endsWith("]")) {
         const subtypes = splitAtTopLevel(type.slice(5, -1));
