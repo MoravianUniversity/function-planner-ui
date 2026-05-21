@@ -41,6 +41,7 @@ const FUNC_DATA_ARRAYS = ['params', 'returns'];
 const LEGACY_FUNC_KEYS = ['readOnly', 'showCode', 'showTestCode'];
 
 export class Model {
+    #suppressObservers = false;
     #ownsDoc = false;
 
     /**
@@ -153,8 +154,9 @@ export class Model {
      * @param {object} data imported model data
      */
     importModel(data) {
+        for (const key of this.functions.keys()) { this.#fireFuncRemoveListeners(key); }
+        this.#suppressObservers = true;
         this.model.transact(() => {
-            // TODO: temporarily disable observers while importing?
             this.modelData.clear();
             this.functions.clear();
             this.calls.clear();
@@ -179,6 +181,10 @@ export class Model {
                 this.calls.set(callKey, true);
             }
         });
+        this.#suppressObservers = false;
+        this.fireModelDataListeners();
+        for (const key of this.functions.keys()) { this.#fireFuncAddListeners(key); }
+        for (const {from, to} of (data.calls || [])) { this.#fireCallListeners('add', null, null, from, to); }
     }
 
     /**
@@ -201,6 +207,7 @@ export class Model {
     }
 
     #fireListeners(listeners, ...args) {
+        if (this.#suppressObservers) { return; }
         if (listeners) {
             for (const callback of listeners) { callback(...args); }
         }
