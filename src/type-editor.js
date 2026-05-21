@@ -292,7 +292,7 @@ class TypeEditor {
         }
         const trimmed = name.trim();
         // Must match identifier pattern: [a-zA-Z][a-zA-Z0-9_]*
-        const identifierPattern = /^[a-zA-Z][a-zA-Z0-9_]*$/;
+        const identifierPattern = /^[a-zA-Z][a-zA-Z0-9_.|,[\]() ]*$/;
         if (!identifierPattern.test(trimmed)) {
             return false;
         }

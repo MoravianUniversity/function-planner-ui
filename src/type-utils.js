@@ -7,26 +7,33 @@ const BASE_TYPES = new Set(['int', 'float', 'str', 'bool']);
 const CONTAINER_TYPES = new Set(['list', 'tuple', 'set', 'dict']);
 
 function normalizeString(text) {
-    return (text || '').toString().trim().replace(/\s+/g, ' ');
+    return (text || '').toString().replace(/\s+/g, '');
 }
 
-function parsePythonType(typeStr) {
-    const src = normalizeString(typeStr);
+function parsePythonType(src) {
     if (!src || src === '?') { return { type: '' }; }
 
     const parseAt = (start = 0) => {
         let i = start;
-        while (i < src.length && /\s/.test(src[i])) i++;
-
-        const nameMatch = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i));
+        const nameMatch = /^[A-Za-z_][A-Za-z0-9_.]*/.exec(src.slice(i));
         if (!nameMatch) {
-            throw new Error('Expected type name');
+            throw new Error(`Expected type name (position ${i}, got: ${src.slice(i)})`);
         }
         const rawName = nameMatch[0];
         const name = rawName.toLowerCase();
         i += rawName.length;
 
-        while (i < src.length && /\s/.test(src[i])) i++;
+        // Handle union types with '|'
+        if (src[i] === '|') {
+            const types = [{ type: name }];
+            while (src[i] === '|') {
+                i++; // skip '|'
+                const [nextType, nextPos] = parseAt(i);
+                types.push(nextType);
+                i = nextPos;
+            }
+            return [{ type: 'union', types }, i];
+        }
 
         // Bare names
         if (src[i] !== '[') {
@@ -43,8 +50,6 @@ function parsePythonType(typeStr) {
         i++; // skip '['
         const args = [];
         while (true) {
-            while (i < src.length && /\s/.test(src[i])) i++;
-
             if (src.slice(i, i + 3) === '...') {
                 args.push({ type: 'ellipsis' });
                 i += 3;
@@ -54,10 +59,9 @@ function parsePythonType(typeStr) {
                 i = next;
             }
 
-            while (i < src.length && /\s/.test(src[i])) i++;
             if (src[i] === ',') { i++; continue; }
             if (src[i] === ']') { i++; break; }
-            throw new Error('Expected , or ]');
+            throw new Error(`Expected , or ] (position ${i}, got: ${src.slice(i)})`);
         }
 
         if (name === 'list') {
@@ -87,8 +91,8 @@ function parsePythonType(typeStr) {
     };
 
     const [parsed, end] = parseAt(0);
-    if (normalizeString(src.slice(end)) !== '') {
-        throw new Error('Unexpected trailing tokens');
+    if (src.length !== end) {
+        throw new Error(`Unexpected trailing tokens (position ${end}, got: ${src.slice(end)})`);
     }
     return parsed;
 }
@@ -100,6 +104,7 @@ function needsParensInEnglish(ast) {
 function astToEnglish(ast) {
     if (!ast || !ast.type) { return '?'; }
     if (ast.type === 'custom') { return ast.customValue || '?'; }
+    if (ast.type === 'union') { return joinEnglish(ast.types.map(astToEnglish), 'or'); }
     if (BASE_TYPES.has(ast.type)) { return ast.type; }
 
     if (ast.type === 'list') {
@@ -128,10 +133,10 @@ function astToEnglish(ast) {
     return ast.type;
 }
 
-function joinEnglish(items) {
+function joinEnglish(items, joiner = 'and') {
     if (items.length <= 1) { return items[0] || '?'; }
-    if (items.length === 2) { return `${items[0]} and ${items[1]}`; }
-    return `${items.slice(0, -1).join(', ')}, and ${items.at(-1)}`;
+    if (items.length === 2) { return `${items[0]} ${joiner} ${items[1]}`; }
+    return `${items.slice(0, -1).join(', ')}, ${joiner} ${items.at(-1)}`;
 }
 
 export function toEnglishType(typeStr) {

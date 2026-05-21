@@ -71,7 +71,7 @@ function indentText(text, indent=4) {
 }
 
 const matchChars = { '(': ')', '[': ']', '{': '}' };
-function splitAtTopLevel(str) {
+function splitAtTopLevel(str, separator=',') {
     const stack = [];
     const results = [];
     let current = '';
@@ -83,8 +83,8 @@ function splitAtTopLevel(str) {
         } else if (char === stack[stack.length - 1]) {
             stack.pop();
             current += char;
-        } else if (char === ',' && stack.length === 0) {
-            // Split here - comma is not inside parentheses
+        } else if (char === separator && stack.length === 0) {
+            // Split here - separator is not inside parentheses
             results.push(current.trim());
             current = '';
         } else {
@@ -105,9 +105,13 @@ const DEFAULT_VALUES = {
     "tuple": "()",
     "dict": "{}",
     "set": "set()",
+    "None": "None",
 }
 function defaultReturnValue(type) {
-    type = type.replace(" ", "");
+    type = type.replace(/\s+/g, "");
+    union = splitAtTopLevel(type, separator='|');
+    if (union.length === 0) { return "None"; }
+    if (union.length > 1) { return union.includes("None") ? defaultReturnValue(union[0]) : union[0]; }
     if (DEFAULT_VALUES[type]) { return DEFAULT_VALUES[type]; }
     if (type.startsWith("list[") && type.endsWith("]")) {
         const subtypes = splitAtTopLevel(type.slice(5, -1));
