@@ -54,8 +54,8 @@ export function setupDiagram(
         allowLink: !globalReadonly,
         isReadOnly: globalReadonly,
         initialAutoScale: go.AutoScale.Uniform,
-        defaultScale: 1.5,
-        padding: 125,
+        defaultScale: 1.25,
+        padding: new go.Margin(paddingVert, paddingHoriz, paddingVert, paddingHoriz),
         maxSelectionCount: 1,
         layout: new go.LayeredDigraphLayout({ direction: 90, layerSpacing: 50, columnSpacing: 30 }),
         //'undoManager.isEnabled': true, // handled by Yjs
@@ -72,12 +72,43 @@ export function setupDiagram(
     }
 
     // Node template
+    const foregroundLayer = diagram.findLayer("Foreground");
+    diagram.addLayerBefore(new go.Layer({
+        name: "Unconnected",
+        allowMove: false,
+        isInDocumentBounds: false,
+        isViewportAligned: true,
+        opacity: 1.0,
+    }), foregroundLayer);
+    function getLayerName(node) {
+        if (node.linksConnected.count === 0 && node.data.name !== 'main') return 'Unconnected';
+        return node.isSelected ? 'Foreground' : '';
+    }
     diagram.nodeTemplate = new go.Node('Spot', {
-        locationSpot: go.Spot.Center,
         isShadowed: true,
         shadowOffset: new go.Point(0, 2),
         selectionObjectName: 'BODY',
         toolTip: createToolTip(rootElem),
+        layerName: 'Unconnected',
+        isLayoutPositioned: false,
+
+        selectionChanged: (part) => {
+            part.layerName = getLayerName(part);
+        },
+        linkConnected: (node) => {
+            const newLayer = getLayerName(node);
+            if (node.layerName === 'Unconnected' && newLayer !== 'Unconnected') {
+                nodeIsBecomingConnected(node);
+            }
+            node.layerName = newLayer;
+        },
+        linkDisconnected: (node) => {
+            const newLayer = getLayerName(node);
+            if (node.layerName !== 'Unconnected' && newLayer === 'Unconnected') {
+                nodeIsBecomingUnconnected(node);
+            }
+            node.layerName = newLayer;
+        },
 
         // hide the expand/collapse button when not selected or hovered
         // and change the node appearance on hover to indicate interactivity
@@ -111,8 +142,8 @@ export function setupDiagram(
             makeNameEditor(model, options)
         ),
     )
+    .bind('isLayoutPositioned', 'layerName', (ln) => ln !== 'Unconnected')
     .theme('shadowColor', 'shadow')
-    .bindObject('layerName', 'isSelected', (sel) => (sel ? 'Foreground' : ''))
     .bind('deletable', 'readOnly', (ro) => !ro); // if any property is readOnly, the node is not deletable
     if (SHOW_COLLAPSE_BUTTON) {
         diagram.nodeTemplate.add(go.GraphObject.build('TreeExpanderButton', {
@@ -308,12 +339,20 @@ export function setupDiagram(
         // PlanConfig owns per-function readOnly; ignore any value from the collaborative model.
         const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name) };
         diagram.model.addNodeData(nodeData);
+        const node = diagram.findNodeForKey(key);
+        node.layerName = getLayerName(node);
+        if (node.layerName === 'Unconnected') {
+            nodeIsBecomingUnconnected(node);
+        } else {
+            nodeIsBecomingConnected(node);
+        }
         if (options.canClaimFuncs && data.owner) {
             setGroup(diagram.findNodeForKey(key), data.owner);
         }
         // Only the client that added the function should select/open it.
         if (model.synced && local) {
             diagram.select(diagram.findNodeForKey(key));
+            updateUnconnectedNodesLayout(diagram);
         }
     });
     model.addFuncRemoveListener((key) => {
@@ -324,6 +363,7 @@ export function setupDiagram(
             diagram.model.removeNodeData(node.data);
         }
         updateInterNodeProblems(model, options);
+        updateUnconnectedNodesLayout(diagram);
     });
     model.addFuncListener('', (key, property, newValue) => {
         const node = diagram.findNodeForKey(key);
@@ -332,6 +372,7 @@ export function setupDiagram(
                 // Ignore collaborative model readOnly; policy is PlanConfig.functionReadOnly.
                 return;
             }
+            let changed = false;
             newValue = newValue ?? DEFAULTS[property]; // ensure no undefined/null values
             if (property === 'name') {
                 newValue = newValue?.toString()?.trim();
@@ -339,13 +380,15 @@ export function setupDiagram(
                 if (newValue === '') { newValue = 'function'; }
                 diagram.model.setDataProperty(node.data, property, newValue);
                 diagram.model.setDataProperty(node.data, 'readOnly', effectiveNodeReadOnly(newValue));
-                return;
+                // TODO: return; //?
+                changed = true;
             } else if (property === 'owner' && options.canClaimFuncs) {
                 newValue = newValue?.toString()?.trim();
                 maybeRemoveGroup(node);
                 setGroup(node, newValue);
             }
             diagram.model.setDataProperty(node.data, property, newValue);
+            if (changed) { updateUnconnectedNodesLayout(diagram); }
         }
     });
     model.addFuncListener('problems', (key, _, newValue) => {
@@ -357,9 +400,11 @@ export function setupDiagram(
         if (node) { diagram.model.setDataProperty(node.data, 'linkProblems', newValue); }
     });
     model.addFuncCallListener((action, oldFrom, oldTo, newFrom, newTo) => {
+        let changed = false;
         if (action === 'add') {
             if (diagram.findLinksByExample({ from: newFrom, to: newTo }).count === 0) {
                 diagram.model.addLinkData({ from: newFrom, to: newTo });
+                changed = true;
             }
         } else {
             const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
@@ -368,13 +413,16 @@ export function setupDiagram(
                     diagram.model.setDataProperty(link.data, 'problems', [...newFrom]);
                 } else if (action === 'delete') {
                     diagram.model.removeLinkData(link.data);
+                    changed = true;
                 } else if (action === 'update') {
-                    if (newFrom !== oldFrom) { diagram.model.setDataProperty(link.data, 'from', newFrom); }
-                    if (newTo !== oldTo) { diagram.model.setDataProperty(link.data, 'to', newTo); }
+                    if (newFrom !== oldFrom) { diagram.model.setDataProperty(link.data, 'from', newFrom); changed = true; }
+                    if (newTo !== oldTo) { diagram.model.setDataProperty(link.data, 'to', newTo); changed = true; }
                 }
             }
         }
+        if (changed) { updateUnconnectedNodesLayout(diagram); }
     });
+    diagram.addDiagramListener('LayoutCompleted', () => { updateUnconnectedNodesLayout(diagram); });
 
     return diagram;
 }
@@ -469,6 +517,53 @@ function createToolTip(rootElem) {
         },
         hide: (diagram, tool) => { toolTipElem.style.display = 'none'; },
     });
+}
+
+function updateUnconnectedNodesLayout(diagram) {
+    const width = diagram.div.offsetWidth;
+    const paddingHoriz = diagram.padding.left;
+    const paddingVert = diagram.padding.top;
+
+    const unconnectedNodes = Array.from(diagram.nodes).filter(node => node.layerName === 'Unconnected');
+    const rowHeights = [0];
+    const rowNodes = [[]];
+    let currentRow = 0;
+    let x = paddingHoriz;
+    unconnectedNodes.forEach(node => {
+        node.ensureBounds();
+        const w = node.naturalBounds.width;
+        if (x + w > width - paddingHoriz) {
+            x = paddingHoriz;
+            rowHeights.push(0);
+            rowNodes.push([]);
+            currentRow++;
+        }
+        node.alignment = new go.Spot(0, 1, x, 0);
+        x += 5 + w;
+        rowHeights[currentRow] = Math.max(rowHeights[currentRow], node.naturalBounds.height);
+        rowNodes[currentRow].push(node);
+    });
+
+    let y = 10;
+    for (const rowHeight of rowHeights) {
+        y -= rowHeight + 5;
+        for (const node of rowNodes.shift()) {
+            const spot = node.alignment;
+            node.alignment = new go.Spot(0, 1, spot.offsetX, y);
+        }
+    }
+
+    diagram.padding = new go.Margin(paddingVert, paddingHoriz, paddingVert - y + 10, paddingHoriz);
+}
+
+function nodeIsBecomingUnconnected(node) {
+    node.isLayoutPositioned = false;
+}
+
+function nodeIsBecomingConnected(node) {
+    node.alignment = go.Spot.Default;
+    node.scale = 1.0;
+    node.isLayoutPositioned = true;
 }
 
 function isCallsIntoRO(ro) {
