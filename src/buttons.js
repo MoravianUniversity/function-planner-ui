@@ -31,6 +31,14 @@ export const MODULE_DOCUMENTATION_TOO_SHORT_CLASS_NAME = 'func-planner-module-do
 export const AUTHOR_NAMES_MISSING_TOO_SHORT_NAME = 'func-planner-author-names-too-short';
 export const NUM_COUNT_CLASS_NAME = 'func-planner-count';
 export const NUM_TESTABLE_CLASS_NAME = 'func-planner-testable';
+export const NUM_INPUT_FUNCS_CLASS_NAME = 'func-planner-input-funcs';
+export const NUM_OUTPUT_FUNCS_CLASS_NAME = 'func-planner-output-funcs';
+const DISPLAY_NAME = {
+    'count': 'functions',
+    'testable': 'testable functions',
+    'input-funcs': 'input functions',
+    'output-funcs': 'output-only functions',
+}
 
 /**
  * Create all of the buttons and UI elements for the diagram.
@@ -327,13 +335,21 @@ direction.</p>
 
 function makeInfoBox(parentDiv, model, options) {
     const minFunctions = options.minFunctions ?? 1;
+    const maxFunctions = options.maxFunctions ? options.maxFunctions : Infinity; // doesn't display, but shows an error
     const minTestable = options.minTestable ?? 0;
+    const maxTestable = options.maxTestable ? options.maxTestable : Infinity; // doesn't display, but shows an error
+    const minInputFuncs = options.minInputFuncs ?? 0;
+    const maxInputFuncs = options.maxInputFuncs ? options.maxInputFuncs : Infinity; // doesn't display, but shows an error
+    const minOutputFuncs = options.minOutputFuncs ?? 0;
+    const maxOutputFuncs = options.maxOutputFuncs ? options.maxOutputFuncs : Infinity; // doesn't display, but shows an error
 
     const infoBox = document.createElement('div');
     infoBox.className = INFO_BOX_CLASS_NAME;
     infoBox.innerHTML = '<table>' +
         `<tr class="${NUM_COUNT_CLASS_NAME}"><td>Functions:</td><td>0</td><td>/</td><td>${minFunctions}</td></td></tr>` +
         `<tr class="${NUM_TESTABLE_CLASS_NAME}"><td>Testable:</td><td>0</td><td>/</td><td>${minTestable}</td></tr>` +
+        `<tr class="${NUM_INPUT_FUNCS_CLASS_NAME}"><td>Input Functions:</td><td>0</td><td>/</td><td>${minInputFuncs}</td></tr>` +
+        `<tr class="${NUM_OUTPUT_FUNCS_CLASS_NAME}"><td>Output Functions:</td><td>0</td><td>/</td><td>${minOutputFuncs}</td></tr>` +
         '</table>' +
         `<div class="${MAIN_CHECK_CLASS_NAME} value-hidden value-error">Need a main function</div>` +
         `<div class="${MODULE_DOCUMENTATION_MISSING_CLASS_NAME} value-hidden value-error">Program header is missing</div>` +
@@ -348,9 +364,12 @@ function makeInfoBox(parentDiv, model, options) {
     const moduleDocTooShort = infoBox.getElementsByClassName(MODULE_DOCUMENTATION_TOO_SHORT_CLASS_NAME)[0];
     const authorNamesMissing = infoBox.getElementsByClassName(AUTHOR_NAMES_MISSING_CLASS_NAME)[0];
     const authorNamesTooShort = infoBox.getElementsByClassName(AUTHOR_NAMES_MISSING_TOO_SHORT_NAME)[0];
+    const inputFuncsRow = infoBox.getElementsByClassName(NUM_INPUT_FUNCS_CLASS_NAME)[0];
+    const outputFuncsRow = infoBox.getElementsByClassName(NUM_OUTPUT_FUNCS_CLASS_NAME)[0];
     if (minFunctions <= 1) { countRow.classList.add('value-hidden'); }
     if (minTestable <= 0) { testableRow.classList.add('value-hidden'); }
-    
+    if (minInputFuncs <= 0) { inputFuncsRow.classList.add('value-hidden'); }
+    if (minOutputFuncs <= 0) { outputFuncsRow.classList.add('value-hidden'); }
     function update() {
         const functions = Array.from(model.functions.values());
         
@@ -377,16 +396,20 @@ function makeInfoBox(parentDiv, model, options) {
             }
         }
 
-        countRow.cells[1].textContent = functions.length;
-        countRow.classList.toggle('value-error', functions.length < minFunctions);
-        model.clearModelDataProblem(null, "functions");
-        if (functions.length < minFunctions) { model.recordModelDataProblem("error", "functions", `There must be at least ${minFunctions} functions.`); }
+        function updateCount(n, row, min, max) {
+            row.cells[1].textContent = n;
+            row.classList.toggle('value-error', n < min || n > max);
+            const field = row.classList[0].substring('func-planner-'.length);
+            model.clearModelDataProblem(null, field);
+            console.log({ field, n, min, max });
+            if (n < min) { model.recordModelDataProblem("error", field, `There must be at least ${min} ${DISPLAY_NAME[field] || field}.`); }
+            if (n > max) { model.recordModelDataProblem("error", field, `There must be at most ${max} ${DISPLAY_NAME[field] || field}.`); }
+        }
 
-        const nTestable = functions.filter(n => n.get('testable')).length;
-        testableRow.cells[1].textContent = nTestable;
-        testableRow.classList.toggle('value-error', nTestable < minTestable);
-        model.clearModelDataProblem(null, "testable");
-        if (nTestable < minTestable) { model.recordModelDataProblem("error", "testable", `There must be at least ${minTestable} testable functions.`); }
+        updateCount(functions.length, countRow, minFunctions, maxFunctions);
+        updateCount(functions.filter(n => n.get('testable')).length, testableRow, minTestable, maxTestable);
+        updateCount(functions.filter(n => n.get('io') === 'output').length, outputFuncsRow, minOutputFuncs, maxOutputFuncs);
+        updateCount(functions.filter(n => ['input', 'validation'].includes(n.get('io'))).length, inputFuncsRow, minInputFuncs, maxInputFuncs);
     }
     model.addModelDataListener('documentation', update);
     model.addModelDataListener('authors', update);
@@ -394,5 +417,6 @@ function makeInfoBox(parentDiv, model, options) {
     model.addFuncRemoveListener(update);
     model.addFuncListener('name', update);
     model.addFuncListener('testable', update);
+    model.addFuncListener('io', update);
     update();
 }
