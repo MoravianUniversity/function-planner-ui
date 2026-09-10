@@ -77,7 +77,11 @@ function makeAuthorNames(model, options, funcs) {
     label.textContent = 'By:';
     label.id = 'func-authors-label';
 
-    let readOnly = false;
+    // Base-plan admin templates: authors optional/display-only.
+    // Collaborative hosts: authors locked to plan members (externalAuthors).
+    const authorsFromMembers = options.externalAuthors != null;
+    const authorsLocked = Boolean(options.adminMode) || authorsFromMembers;
+    let readOnly = authorsLocked;
 
     function currentValues() {
         return [...list.getElementsByTagName('input')].map((input) => input.value.trim());
@@ -140,8 +144,21 @@ function makeAuthorNames(model, options, funcs) {
         }
     }));
 
+    // Cannot use wrapWithLabel here because there are multiple inputs
+    const outer = document.createElement('div');
+    outer.append(label, container);
+
     funcs.listen('authors', (value) => {
-        const names = (value && value.length > 0) ? value.map((v) => v.trim()) : [''];
+        const trimmed = (value && value.length > 0) ? value.map((v) => v.trim()) : [];
+        const names = authorsLocked
+            ? trimmed.filter((name) => name.length > 0)
+            : (trimmed.length > 0 ? trimmed : ['']);
+        if (authorsFromMembers) {
+            outer.style.display = '';
+        } else if (authorsLocked) {
+            // adminMode template: only show if seed JSON already has authors
+            outer.style.display = names.length > 0 ? '' : 'none';
+        }
         const current = currentValues();
         if (current.length !== names.length || current.some((name, index) => name !== names[index])) {
             const selected = list.querySelector('input:focus')?.value;
@@ -149,17 +166,21 @@ function makeAuthorNames(model, options, funcs) {
             if (selected != null) { list.querySelector(`input[value="${selected}"]`)?.focus(); }
         }
     });
-    funcs.listenRO('authors', (value) => {
-        readOnly = value;
-        container.classList.toggle('func-authors-read-only', readOnly);
-        for (const input of list.getElementsByTagName('input')) { input.readOnly = readOnly; }
-    });
 
-    // Cannot use wrapWithLabel here because there are multiple inputs
-    const outer = document.createElement('div');
-    outer.append(label, container);
+    if (authorsLocked) {
+        container.classList.add('func-authors-read-only');
+        if (authorsFromMembers) {
+            label.title = 'Authors are the members of this plan';
+        }
+    } else {
+        funcs.listenRO('authors', (value) => {
+            readOnly = value;
+            container.classList.toggle('func-authors-read-only', readOnly);
+            for (const input of list.getElementsByTagName('input')) { input.readOnly = readOnly; }
+        });
+    }
+
     return outer;
-
 }
 
 function makeTestDocumentation(model, options, funcs) {

@@ -146,22 +146,37 @@ function makeOwnerSelect(model, options, funcs) {
     select.className = 'func-owner';
     select.appendChild(makeOption('', 'Shared/Not Applicable'))
 
+    function authorLabels() {
+        return (model.modelData.get('authors')?.toJSON() || []).map((a) => String(a ?? '').trim()).filter(Boolean);
+    }
+
+    function rebuildOptions() {
+        const authors = authorLabels();
+        const current = [...select.options].slice(1).map((o) => o.value);
+        if (current.length === authors.length && current.every((v, i) => v === authors[i])) {
+            return;
+        }
+        const selected = select.value;
+        select.options.length = 1;
+        for (const author of authors) {
+            select.options.add(makeOption(author));
+        }
+        select.value = authors.includes(selected) ? selected : '';
+    }
+
     select.addEventListener('change', (e) => { funcs.set('owner', e.target.value); });
     funcs.listen('owner', (value) => {
-        const authors = model.modelData.get('authors')?.toArray() || [];
-        if ([...select.options].slice(1).map((o) => o.value) !== [...authors]) {
-            select.options.length = 1;
-            for (const author of authors) {
-                select.options.add(makeOption(author));
-            }
-        }
+        rebuildOptions();
         select.value = value?.toString() || '';
     });
+    model.addModelDataListener('authors', () => { rebuildOptions(); });
     funcs.listenRO('owner', (value) => { select.disabled = value; });
 
     const label = wrapWithLabel(select, 'Owner: ');
     const info = document.createElement('p');
-    info.textContent = 'See "By" in module settings to update this list.';
+    info.textContent = options.externalAuthors != null
+        ? 'Owners are plan members.'
+        : 'See "By" in module settings to update this list.';
     label.append(info);
     return label;
 }

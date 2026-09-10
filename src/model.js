@@ -239,6 +239,33 @@ export class Model {
     }
 
     /**
+     * Replace module authors with an external list (e.g. plan members).
+     * No-ops when the list is unchanged. Clears function owners that are no
+     * longer in the list.
+     * @param {string[]} names
+     */
+    syncExternalAuthors(names) {
+        const next = (Array.isArray(names) ? names : [])
+            .map((n) => String(n ?? '').trim())
+            .filter((n) => n.length > 0);
+        const current = (this.modelData.get('authors')?.toJSON() || [])
+            .map((n) => String(n ?? '').trim());
+        if (current.length === next.length && current.every((n, i) => n === next[i])) {
+            return;
+        }
+        this.model.transact(() => {
+            this.updateModelData('authors', next);
+            const allowed = new Set(next);
+            for (const [, func] of this.functions) {
+                const owner = func.get('owner')?.toString() || '';
+                if (owner && !allowed.has(owner)) {
+                    func.delete('owner');
+                }
+            }
+        });
+    }
+
+    /**
      * Add a listener for changes to a property in the model data. The changes
      * can come from anywhere (Yjs or local updates).
      * @param {string} property property name to listen for, empty string for

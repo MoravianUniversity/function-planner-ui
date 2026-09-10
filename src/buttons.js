@@ -204,7 +204,8 @@ function makeWidgetButtons(parentDiv, diagram, model, options={}) {
     if (options.showSaveJSON !== false) {
         addButton(buttons, saveIcon, 'no-outline', 'Save as JSON', () => { saveJSON(model, options); });
     }
-    if (!collaborative && !globalReadonly) {
+    const showLoad = options.showLoadJSON === true || (!collaborative && !globalReadonly);
+    if (showLoad && !globalReadonly) {
         addButton(buttons, loadIcon, 'no-outline', 'Load from JSON', () => { loadJSON(model, options); });
         // addButton(buttons, mergeIcon, 'no-outline', 'Merge from JSON', () => { importJSON(model, options); });
     }
@@ -365,8 +366,16 @@ function makeInfoBox(parentDiv, model, options) {
             moduleDocTooShort.classList.toggle('value-hidden', doc.length == 0 || (doc.length >= (options.minModuleDescLength ?? 25)));
             const authors = model.modelData.get('authors')?.toJSON() || [];
             const lengths = authors.map(name => name.trim().length);
-            authorNamesMissing.classList.toggle('value-hidden', authors.length > 0 && lengths.some(len => len > 0));
-            authorNamesTooShort.classList.toggle('value-hidden', authors.length == 0 || lengths.every(len => len >= 3));
+            if (options.adminMode && options.externalAuthors == null) {
+                authorNamesMissing.classList.add('value-hidden');
+                authorNamesTooShort.classList.add('value-hidden');
+            } else if (options.externalAuthors != null) {
+                authorNamesMissing.classList.toggle('value-hidden', authors.length > 0 && lengths.some(len => len > 0));
+                authorNamesTooShort.classList.add('value-hidden');
+            } else {
+                authorNamesMissing.classList.toggle('value-hidden', authors.length > 0 && lengths.some(len => len > 0));
+                authorNamesTooShort.classList.toggle('value-hidden', authors.length == 0 || lengths.every(len => len >= 3));
+            }
         }
 
         countRow.cells[1].textContent = functions.length;

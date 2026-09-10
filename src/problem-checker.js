@@ -113,9 +113,19 @@ function checkModuleDocumentation(model, options={}) {
 }
 
 function checkModuleAuthors(model, options={}) {
+    model.clearModelDataProblem(null, "authors");
+    // Base-plan templates (admin, no member list): authors are filled in by students later.
+    if (options.adminMode && options.externalAuthors == null) {
+        return;
+    }
     const authors = model.modelData.get('authors')?.toJSON() || [];
     const lengths = authors.map(name => name.trim().length);
-    model.clearModelDataProblem(null, "authors");
+    if (options.externalAuthors != null) {
+        if (authors.length === 0 || lengths.every(len => len === 0)) {
+            model.recordModelDataProblem("error", "authors", "Plan must have at least one member.");
+        }
+        return;
+    }
     if (authors.length === 0 || lengths.every(len => len === 0)) {
         model.recordModelDataProblem("error", "authors", "Author name(s) are required.");
     } else if (lengths.some(len => len < 3)) {
