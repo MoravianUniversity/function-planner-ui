@@ -51,8 +51,8 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
  * @param {boolean} options.canClaimFuncs - If true, functions can be "claimed" by one author, colorizing/exporting them separately
  * @param {boolean} options.adminMode - If true, enables admin mode features (nothing is read-only or not shown, allows editing read-only properties)
  * @param {boolean} options.callGraphOnly - If true, hides the module and function inspectors, only shows the call graph (and suppresses most problem checking)
- * @param {boolean} [options.showSaveJSON] If false, hides the Save as JSON toolbar button (default true)
- * @param {boolean} [options.showLoadJSON] If true, shows Load from JSON even in collaborative mode (default: non-collab editable only)
+ * @param {boolean} [options.showSaveJSON] Show Save as JSON (default: true when local, false when collaborative)
+ * @param {boolean} [options.showLoadJSON] Show Load from JSON (default: true when local, false when collaborative)
  * @param {string[]|null} [options.externalAuthors] When non-null (collaborative hosts),
  *   authors are locked to this list (typically plan members) instead of free-text entry.
  * @param {import('yjs').Doc} [options.ydoc] External Y.Doc shared with a WebsocketProvider (server is source of truth)
@@ -78,12 +78,13 @@ export default function init(
     options.adminMode = options.adminMode ?? false;
     options.callGraphOnly = options.callGraphOnly ?? false;
     options.canClaimFuncs = options.canClaimFuncs ?? false;
-    options.showSaveJSON = options.showSaveJSON ?? true;
-    options.showLoadJSON = options.showLoadJSON ?? false;
     options.externalAuthors = options.externalAuthors ?? null;
     options.readonly = options.readonly ?? false;
     options.useIndexedDB = options.useIndexedDB ?? !options.ydoc;
     options.collaborative = Boolean(options.ydoc) || options.useIndexedDB === false;
+    // Local demos default to Save/Load JSON on; collaborative hosts opt in explicitly.
+    options.showSaveJSON = options.showSaveJSON ?? !options.collaborative;
+    options.showLoadJSON = options.showLoadJSON ?? !options.collaborative;
     options.extraFabs = options.extraFabs ?? [];
     options.theme = localStorage.getItem('func-planner-theme') === 'dark' ? 'dark' : 'light';
 

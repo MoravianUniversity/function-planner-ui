@@ -201,11 +201,10 @@ function makeWidgetButtons(parentDiv, diagram, model, options={}) {
     model.addFuncRemoveListener(updateTestButton);
     model.addFuncListener('testable', updateTestButton);
     updateTestButton();
-    if (options.showSaveJSON !== false) {
+    if (options.showSaveJSON) {
         addButton(buttons, saveIcon, 'no-outline', 'Save as JSON', () => { saveJSON(model, options); });
     }
-    const showLoad = options.showLoadJSON === true || (!collaborative && !globalReadonly);
-    if (showLoad && !globalReadonly) {
+    if (options.showLoadJSON && !globalReadonly) {
         addButton(buttons, loadIcon, 'no-outline', 'Load from JSON', () => { loadJSON(model, options); });
         // addButton(buttons, mergeIcon, 'no-outline', 'Merge from JSON', () => { importJSON(model, options); });
     }
