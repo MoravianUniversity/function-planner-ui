@@ -366,10 +366,10 @@ export class Model {
         this.#fireListeners(this.#funcListeners['linkProblems'], key, 'linkProblems', problems);
     }
     #funcAddListeners = [];
-    #fireFuncAddListeners(key) {
+    #fireFuncAddListeners(key, local) {
         const data = this.functions.get(key).toJSON();
         delete data.isTrusted;
-        this.#fireListeners(this.#funcAddListeners, key, data);
+        this.#fireListeners(this.#funcAddListeners, key, data, local);
     }
     #funcRemoveListeners = [];
     #fireFuncRemoveListeners(key) {
@@ -378,8 +378,9 @@ export class Model {
     #funcObserver(events) {
         for (const event of events) {
             if (event.target === this.functions) {
+                const local = Boolean(event.transaction?.local);
                 for (const [key, {action, oldValue}] of event.changes.keys) {
-                    if (action === 'add') { this.#fireFuncAddListeners(key); }
+                    if (action === 'add') { this.#fireFuncAddListeners(key, local); }
                     else if (action === 'delete') { this.#fireFuncRemoveListeners(key); }
                     else if (action === 'update') {
                         // empty function to non-empty function (seen during loading)
@@ -388,7 +389,7 @@ export class Model {
                             console.warn(action, key, oldValue?.toJSON(), "->", this.functions.get(key)?.toJSON());
                         }
                         this.#fireFuncRemoveListeners(key);
-                        this.#fireFuncAddListeners(key);
+                        this.#fireFuncAddListeners(key, local);
                     }
                 }
             } else if (event.path.length === 1) {
@@ -433,7 +434,8 @@ export class Model {
      * Add a listener for when a function is added. The addition can come from
      * anywhere (Yjs or local updates).
      * @param {function} callback function to call when the function is added,
-     *  with signature (key, data).
+     *  with signature (key, data, local). `local` is true when this client
+     *  originated the change (including local undo/redo).
      */
     addFuncAddListener(callback) { this.#funcAddListeners.push(callback); }
 

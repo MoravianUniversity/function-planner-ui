@@ -298,14 +298,14 @@ export function setupDiagram(
     model.addModelDataListener('authors', (_, newValue) => {
         diagram.findTopLevelGroups().each(group => group.updateTargetBindings('key'));
     });
-    model.addFuncAddListener((key, data) => {
+    model.addFuncAddListener((key, data, local) => {
         if (!('name' in data) || isBlankFunctionName(data.name)) { data.name = 'function'; }
         diagram.model.addNodeData({ key: key, ...data });
         if (options.canClaimFuncs && data.owner) {
             setGroup(diagram.findNodeForKey(key), data.owner);
         }
-        if (model.synced) {
-            // TODO: if the origin of the change is another user, don't select the new node
+        // Only the client that added the function should select/open it.
+        if (model.synced && local) {
             diagram.select(diagram.findNodeForKey(key));
         }
     });
