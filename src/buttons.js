@@ -35,6 +35,8 @@ export const NUM_TESTABLE_CLASS_NAME = 'func-planner-testable';
 /**
  * Create all of the buttons and UI elements for the diagram.
  * @param {*} diagram
+ * @param {*} model
+ * @param {object} options
  */
 export function makeAllButtons(diagram, model, options={}) {
     const parentDiv = diagram.div.parentNode;
@@ -43,21 +45,79 @@ export function makeAllButtons(diagram, model, options={}) {
     makeInstructionsButton(parentDiv);
     makeWidgetButtons(parentDiv, diagram, model, options);
     makeInfoBox(diagram.div, model, options); // use diagram.div so that it can move with the resized inspector pane
-    return makeShellActionsHost(parentDiv);
+    makeExtraFabs(parentDiv, options.extraFabs);
 }
 
 /**
- * Empty host for shell/app FABs (home, leave, etc.) stacked above the built-in
- * theme/settings/help cluster in the bottom-left.
+ * Extra bottom-left FABs from the host app.
+ * `groups` is an array of groups; each group is an array of
+ * `{ title, icon, onClick, disabled? }`. Groups stack above the built-in
+ * theme/settings/help cluster; buttons within a group stack vertically.
+ *
+ * `icon` may be an SVG URL, inline `<svg>…</svg>` markup, or a short text/emoji.
+ *
  * @param {HTMLElement} parentDiv
- * @returns {HTMLElement}
+ * @param {{ title: string, icon: string, onClick?: function, disabled?: boolean }[][]} [groups]
  */
-export function makeShellActionsHost(parentDiv) {
-    const host = document.createElement('div');
-    host.className = 'func-planner-shell-fabs';
-    host.setAttribute('data-func-planner-shell-actions', '');
-    parentDiv.appendChild(host);
-    return host;
+export function makeExtraFabs(parentDiv, groups) {
+    if (!Array.isArray(groups) || groups.length === 0) {
+        return;
+    }
+    const cluster = document.createElement('div');
+    cluster.className = 'func-planner-extra-fabs';
+    for (const group of groups) {
+        if (!Array.isArray(group) || group.length === 0) {
+            continue;
+        }
+        const groupEl = document.createElement('div');
+        groupEl.className = 'func-planner-extra-fabs-group';
+        for (const fab of group) {
+            if (!fab || !fab.title) {
+                continue;
+            }
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'func-planner-fab';
+            button.title = fab.title;
+            button.setAttribute('aria-label', fab.title);
+            if (fab.disabled) {
+                button.disabled = true;
+            }
+            const iconWrap = document.createElement('div');
+            iconWrap.className = 'func-planner-fab-icon';
+            setFabIcon(iconWrap, fab.icon);
+            button.appendChild(iconWrap);
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (typeof fab.onClick === 'function') {
+                    fab.onClick(e);
+                }
+            });
+            groupEl.appendChild(button);
+        }
+        if (groupEl.childElementCount > 0) {
+            cluster.appendChild(groupEl);
+        }
+    }
+    if (cluster.childElementCount > 0) {
+        parentDiv.appendChild(cluster);
+    }
+}
+
+function setFabIcon(elem, icon) {
+    if (icon == null || icon === '') {
+        return;
+    }
+    const value = String(icon).trim();
+    if (value.startsWith('<svg')) {
+        elem.innerHTML = value;
+        return;
+    }
+    if (value.startsWith('data:image/svg+xml') || value.endsWith('.svg')) {
+        loadSVG(value, elem, '');
+        return;
+    }
+    elem.textContent = value;
 }
 
 function makeWidgetButtons(parentDiv, diagram, model, options={}) {

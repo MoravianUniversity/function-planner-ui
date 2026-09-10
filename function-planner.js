@@ -54,6 +54,8 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
  * @param {boolean} [options.useIndexedDB] Local IndexedDB persistence; defaults to false when ydoc is set, otherwise true
  * @param {boolean} [options.readonly] Global read-only mode (diagram + inspectors still visible)
  * @param {string} [options.licenseKey] GoJS license key (optional; academic demos may omit)
+ * @param {{ title: string, icon: string, onClick?: function, disabled?: boolean }[][]} [options.extraFabs]
+ *   Extra bottom-left FAB groups (arrays of { title, icon, onClick, disabled? }), stacked above theme/settings/help
  * @returns {{ model: Model, diagram: go.Diagram, destroy: () => void }}
  */
 export default function init(
@@ -74,6 +76,7 @@ export default function init(
     options.readonly = options.readonly ?? false;
     options.useIndexedDB = options.useIndexedDB ?? !options.ydoc;
     options.collaborative = Boolean(options.ydoc) || options.useIndexedDB === false;
+    options.extraFabs = options.extraFabs ?? [];
     options.theme = localStorage.getItem('func-planner-theme') === 'dark' ? 'dark' : 'light';
 
     if (options.readonly && !options.adminMode) {
@@ -85,7 +88,7 @@ export default function init(
         useIndexedDB: options.useIndexedDB,
     });
     const diagram = setupDiagram(rootElem, model, options);
-    const shellActionsEl = makeAllButtons(diagram, model, options);
+    makeAllButtons(diagram, model, options);
     if (!options.collaborative) {
         setupDragAndDrop(model, options, diagram.div);
     }
@@ -117,8 +120,6 @@ export default function init(
     return {
         model,
         diagram,
-        /** @type {HTMLElement} Slot for host-app FABs (home/leave); bottom-left above built-in controls. */
-        shellActionsEl,
         destroy() {
             try {
                 diagram.div?.querySelectorAll('*');
