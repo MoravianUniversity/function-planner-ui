@@ -87,14 +87,12 @@ export function makeExtraFabs(parentDiv, groups) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'func-planner-fab func-planner-extra-fab';
-        button.title = fab.title;
-        button.setAttribute('aria-label', fab.title);
+        setImmediateTip(button, fab.title);
         if (fab.disabled) {
             button.disabled = true;
         }
         // index 0 nearest the built-in cluster; later indices go higher
-        button.style.bottom = `calc(15px + 3.75rem + ${index * 1.7}rem)`;
-        button.style.left = '9px';
+        button.style.bottom = `calc(15px + 4rem + ${index * 1.7}rem)`;
         setFabIcon(button, fab.icon);
         button.addEventListener('click', (e) => {
             e.preventDefault();
@@ -121,6 +119,23 @@ function setFabIcon(elem, icon) {
         return;
     }
     elem.textContent = value;
+}
+
+/**
+ * Immediate hover/focus tip (no native title delay). FABs show to the right via CSS.
+ * @param {HTMLElement} elem
+ * @param {string} text
+ */
+function setImmediateTip(elem, text) {
+    const label = String(text || '').trim();
+    if (!label) {
+        return;
+    }
+    elem.removeAttribute('title');
+    elem.setAttribute('data-tip', label);
+    if (!elem.getAttribute('aria-label')) {
+        elem.setAttribute('aria-label', label);
+    }
 }
 
 function makeWidgetButtons(parentDiv, diagram, model, options={}) {
@@ -222,7 +237,7 @@ function makeThemeToggle(parentDiv, options, diagram) {
 
     const checked = options.theme === 'dark';
     const button = htmlToNode(`
-<label class="func-planner-fab theme-toggle" title="Toggle theme">
+<label class="func-planner-fab theme-toggle" data-tip="Toggle theme" aria-label="Toggle theme">
   <input type="checkbox" ${checked ? 'checked' : ''} />
   <span class="theme-toggle-sr">Toggle theme</span>
   <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="theme-toggle__within" height="1em" width="1em" viewBox="0 0 32 32" fill="currentColor">
@@ -256,7 +271,7 @@ function makeThemeToggle(parentDiv, options, diagram) {
 function makeSettingsButton(parentDiv, options) {
     const button = document.createElement('div');
     button.className = 'func-planner-fab func-planner-settings-button';
-    button.title = 'Settings';
+    setImmediateTip(button, 'Settings');
     loadSVG(settingsIcon, button, "⚙️");
     parentDiv.appendChild(button);
 
@@ -283,7 +298,7 @@ function makeSettingsButton(parentDiv, options) {
 function makeInstructionsButton(parentDiv) {
     const button = document.createElement('div');
     button.className = 'func-planner-fab func-planner-instructions-button';
-    button.title = 'Instructions';
+    setImmediateTip(button, 'Instructions');
     loadSVG(helpIcon, button, "ℹ️");
     parentDiv.appendChild(button);
     parentDiv.appendChild(htmlToNode(`<div class="func-planner-instructions"><h2>Instructions</h2>

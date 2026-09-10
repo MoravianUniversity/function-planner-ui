@@ -200,6 +200,40 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     font-size: 1.5em; margin: 0;
     svg { color: var(--text-color); fill: var(--text-color); }
 }
+/* Immediate FAB tips (to the right) — avoid native title delay */
+.func-planner .func-planner-fab[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: calc(100% + 0.45em);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 200;
+    padding: 0.2em 0.5em;
+    border-radius: 0.35em;
+    border: 1px solid var(--stroke-color);
+    background: var(--tooltip-background-color);
+    color: var(--text-color);
+    font-size: 0.55em;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 0.12);
+}
+.func-planner .func-planner-fab[data-tip]:hover::after,
+.func-planner .func-planner-fab[data-tip]:focus-visible::after,
+.func-planner .func-planner-fab[data-tip]:has(:focus-visible)::after {
+    opacity: 1;
+    visibility: visible;
+}
+/* Raise above instructions panel (z-index 1000) while tip is shown */
+.func-planner .func-planner-fab[data-tip]:hover,
+.func-planner .func-planner-fab[data-tip]:focus-visible,
+.func-planner .func-planner-fab[data-tip]:has(:focus-visible) {
+    z-index: 1100;
+}
 .func-planner label.theme-toggle {
     bottom: 10px; left: 10px;
 }
@@ -570,6 +604,8 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
 
 /* Extra host-app FABs — same absolute FAB treatment as settings/theme */
 .func-planner .func-planner-extra-fab {
+    /* slightly inset vs settings (9px) so smaller FA glyphs share the same visual center */
+    left: 11px;
     z-index: 150;
     padding: 0;
     border: none;
@@ -581,8 +617,9 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     cursor: not-allowed;
 }
 .func-planner .func-planner-extra-fab svg {
-    width: 1.125em;
-    height: 1.125em;
+    /* FA solid glyphs fill their viewBox more than settings/theme SVGs */
+    width: 0.95em;
+    height: 0.95em;
     fill: currentColor;
     color: inherit;
     display: block;
