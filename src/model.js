@@ -32,11 +32,27 @@ const FUNC_DATA_TEXTS = ['name', 'desc', 'code', 'testCode'];
 const FUNC_DATA_ARRAYS = ['params', 'returns'];
 
 export class Model {
-    constructor(id, initialData={}) {
+    #ownsDoc = false;
+
+    /**
+     * @param {string} id
+     * @param {object} initialData
+     * @param {object} [modelOptions]
+     * @param {Y.Doc} [modelOptions.ydoc] External Y.Doc (e.g. shared with WebsocketProvider). When set, IndexedDB is off unless useIndexedDB is forced on.
+     * @param {boolean} [modelOptions.useIndexedDB=true] Local IndexedDB persistence (demos). Use false when the server is source of truth.
+     */
+    constructor(id, initialData={}, modelOptions={}) {
         this.synced = false;
         this.id = id;
         this.initialData = initialData;
-        this.model = new Y.Doc();
+        const useIndexedDB = modelOptions.useIndexedDB ?? !modelOptions.ydoc;
+        if (modelOptions.ydoc) {
+            this.model = modelOptions.ydoc;
+            this.#ownsDoc = false;
+        } else {
+            this.model = new Y.Doc();
+            this.#ownsDoc = true;
+        }
 
         // setup modelData
         this.modelData = this.model.getMap('modelData');
@@ -50,29 +66,56 @@ export class Model {
         this.calls = this.model.getMap('calls');
         this.calls.observe((event) => { this.#callObserver(event); });
 
-        // setup persistence
-        this.indexeddb = new IndexeddbPersistence(this.id, this.model); 
-        this.indexeddb.on('synced', () => {
-            // if database is empty, load initial data
-            // TODO: if there is a server, then the server should be the source of truth instead?
-            if (this.functions.size === 0 && this.calls.size === 0) {
-                this.importModel(this.initialData);
-            }
-            this.#fireListeners(this.#listeners['synced']);
-            this.synced = true;
+        const untrackedOrigins = new Set();
 
-            // Migrate authors from old string format to new array format if needed
-            console.log(`Model ${this.id} synced with IndexedDB, current state:`, this.exportModel());
-            const authors = this.modelData.get('authors');
-            if (typeof authors === 'string' || authors instanceof Y.Text) {
-                this.updateModelData('authors', authors);
-            }
-        });
+        // setup persistence — skip when collaborating against a server-backed doc
+        if (useIndexedDB) {
+            this.indexeddb = new IndexeddbPersistence(this.id, this.model);
+            untrackedOrigins.add(this.indexeddb);
+            this.indexeddb.on('synced', () => {
+                this.markSynced({ source: 'indexeddb' });
+            });
+        } else {
+            this.indexeddb = null;
+        }
 
         // setup undo/redo after initial data is loaded
         this.undoManager = new Y.UndoManager([this.modelData, this.functions, this.calls], {
-            untrackedOrigins: new Set([this.indexeddb]) // don't track changes from persistence (this should be the default anyways)
+            untrackedOrigins
         });
+    }
+
+    /**
+     * Mark the model as synced (after IndexedDB or WebsocketProvider sync).
+     * If functions/calls are empty, seeds initialData. Safe to call once.
+     * @param {{ source?: string }} [meta]
+     */
+    markSynced(meta={}) {
+        if (this.synced) {
+            return;
+        }
+        if (this.functions.size === 0 && this.calls.size === 0) {
+            this.importModel(this.initialData);
+        }
+        console.log(`Model ${this.id} synced${meta.source ? ` (${meta.source})` : ''}, current state:`, this.exportModel());
+        const authors = this.modelData.get('authors');
+        if (typeof authors === 'string' || authors instanceof Y.Text) {
+            this.updateModelData('authors', authors);
+        }
+        this.synced = true;
+        this.#fireListeners(this.#listeners['synced']);
+    }
+
+    /** Tear down IndexedDB provider; destroys the Y.Doc only if this Model created it. */
+    destroy() {
+        if (this.indexeddb) {
+            this.indexeddb.destroy();
+            this.indexeddb = null;
+        }
+        if (this.#ownsDoc && this.model) {
+            this.model.destroy();
+        }
+        this.model = null;
     }
 
     /**

@@ -47,14 +47,16 @@ export function makeAllButtons(diagram, model, options={}) {
 
 function makeWidgetButtons(parentDiv, diagram, model, options={}) {
     const isMac = isMacOS()
-    const ctrl = isMac ? '⌘' : 'CTRL+';
+    const ctrl = isMac ? '⌘' : 'CTRL+'
+    const globalReadonly = Boolean(options.readonly) && !options.adminMode;
+    const collaborative = Boolean(options.collaborative);
 
     const buttons = document.createElement('div');
     buttons.className = 'func-planner-buttons';
     parentDiv.appendChild(buttons);
 
-    function undo() { if (model.undoManager.canUndo()) { model.undoManager.undo(); } }
-    function redo() { if (model.undoManager.canRedo()) { model.undoManager.redo(); } }
+    function undo() { if (!globalReadonly && model.undoManager.canUndo()) { model.undoManager.undo(); } }
+    function redo() { if (!globalReadonly && model.undoManager.canRedo()) { model.undoManager.redo(); } }
 
     // keyboard shortcuts
     document.addEventListener('keydown', (e) => {
@@ -63,10 +65,10 @@ function makeWidgetButtons(parentDiv, diagram, model, options={}) {
             if (key === 'r' && !e.shiftKey) {
                 e.preventDefault();
                 diagram.zoomToFit();
-            } else if (key === 'f' && !e.shiftKey) {
+            } else if (key === 'f' && !e.shiftKey && !globalReadonly) {
                 e.preventDefault();
                 model.addFunc();
-            } else if (key === 'z') {
+            } else if (key === 'z' && !globalReadonly) {
                 e.preventDefault();
                 if (e.shiftKey) { redo(); } else { undo(); }
             }
@@ -75,22 +77,26 @@ function makeWidgetButtons(parentDiv, diagram, model, options={}) {
 
     model.addListener('synced', () => { setTimeout(() => { diagram.zoomToFit(); }, 0); });
     addButton(buttons, zoomIcon, '', `Zoom to Fit (${ctrl}R)`, () => { diagram.zoomToFit(); });
-    addButton(buttons, addIcon, 'no-outline', `Add Function (${ctrl}F)`, () => { model.addFunc(); });
+    if (!globalReadonly) {
+        addButton(buttons, addIcon, 'no-outline', `Add Function (${ctrl}F)`, () => { model.addFunc(); });
 
-    // undo/redo buttons
-    const undoButton = addButton(buttons, undoIcon, 'no-outline', `Undo (${ctrl}Z)`, undo);
-    const redoButton = addButton(buttons, redoIcon, 'no-outline', `Redo (⇧${ctrl}Z)`, redo);
-    function updateUndoRedoButtons() {
-        undoButton.disabled = !model.undoManager.canUndo();
-        redoButton.disabled = !model.undoManager.canRedo();
+        // undo/redo buttons
+        const undoButton = addButton(buttons, undoIcon, 'no-outline', `Undo (${ctrl}Z)`, undo);
+        const redoButton = addButton(buttons, redoIcon, 'no-outline', `Redo (⇧${ctrl}Z)`, redo);
+        function updateUndoRedoButtons() {
+            undoButton.disabled = !model.undoManager.canUndo();
+            redoButton.disabled = !model.undoManager.canRedo();
+        }
+        model.undoManager.on('stack-item-added', updateUndoRedoButtons);
+        model.undoManager.on('stack-item-popped', updateUndoRedoButtons);
+        model.undoManager.on('stack-cleared', updateUndoRedoButtons);
+        updateUndoRedoButtons();
+
+        // reset button (local demos / non-collab only)
+        if (!collaborative) {
+            addButton(buttons, resetIcon, 'no-outline', `Reset`, () => { reset(model, options); });
+        }
     }
-    model.undoManager.on('stack-item-added', updateUndoRedoButtons);
-    model.undoManager.on('stack-item-popped', updateUndoRedoButtons);
-    model.undoManager.on('stack-cleared', updateUndoRedoButtons);
-    updateUndoRedoButtons();
-
-    // reset button
-    addButton(buttons, resetIcon, 'no-outline', `Reset`, () => { reset(model, options); });
 
     // export/import buttons
     addButton(buttons, pythonIcon, '', 'Create Python Template', () => { exportToPython(model, options); });
@@ -102,10 +108,11 @@ function makeWidgetButtons(parentDiv, diagram, model, options={}) {
     model.addFuncRemoveListener(updateTestButton);
     model.addFuncListener('testable', updateTestButton);
     updateTestButton();
-    // TODO: only have these available if not connected to a shared Yjs model
     addButton(buttons, saveIcon, 'no-outline', 'Save as JSON', () => { saveJSON(model, options); });
-    addButton(buttons, loadIcon, 'no-outline', 'Load from JSON', () => { loadJSON(model, options); });
-    // addButton(buttons, mergeIcon, 'no-outline', 'Merge from JSON', () => { importJSON(model, options); });
+    if (!collaborative && !globalReadonly) {
+        addButton(buttons, loadIcon, 'no-outline', 'Load from JSON', () => { loadJSON(model, options); });
+        // addButton(buttons, mergeIcon, 'no-outline', 'Merge from JSON', () => { importJSON(model, options); });
+    }
 }
 
 function addButton(holder, icon, classes, name, callback) {

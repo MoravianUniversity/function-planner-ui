@@ -592,6 +592,10 @@ function loadJSONFile(model, options={}, file) {
 }
 
 export function setupDragAndDrop(model, options={}, div) {
+    // Skip when the doc is shared via Yjs WebSocket (server is source of truth).
+    if (options.collaborative || options.ydoc || options.useIndexedDB === false) {
+        return;
+    }
     div.addEventListener("drop", (e) => {
         e.preventDefault();
         div.classList.remove(DRAG_OVER_CLASS);

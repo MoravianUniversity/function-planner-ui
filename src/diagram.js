@@ -36,12 +36,18 @@ export function setupDiagram(
     rootElem.appendChild(diagramDiv);
     let reversingLink = false;
 
-    go.Diagram.licenseKey = "ACADEMIC"
+    if (options.licenseKey) {
+        go.Diagram.licenseKey = options.licenseKey;
+    }
+    const globalReadonly = Boolean(options.readonly) && !options.adminMode;
     const diagram = new go.Diagram(diagramDiv, {
         allowCopy: false,
         allowMove: false,
         allowSelect: true,
-        allowDelete: true,
+        allowDelete: !globalReadonly,
+        allowInsert: !globalReadonly,
+        allowLink: !globalReadonly,
+        isReadOnly: globalReadonly,
         initialAutoScale: go.AutoScale.Uniform,
         defaultScale: 1.5,
         padding: 125,

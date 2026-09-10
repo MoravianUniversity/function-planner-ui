@@ -559,3 +559,11 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
 .code-box .token.function, .code-box .token.builtin, .code-box .token.function-call { color: #DCDCAA !important; }
 .code-box .token.class-name, .code-box .token.type { color: #4EC9B0 !important; }
 .code-box::selection, .code-box .token::selection { background: #667B8F !important; }
+/* Global read-only host (staff TA / course ended): block inspector edits */
+.func-planner.func-planner--readonly .inspector input,
+.func-planner.func-planner--readonly .inspector textarea,
+.func-planner.func-planner--readonly .inspector select,
+.func-planner.func-planner--readonly .inspector button:not(.inspector-resize) {
+    pointer-events: none;
+    opacity: 0.85;
+}

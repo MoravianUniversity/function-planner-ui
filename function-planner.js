@@ -1,6 +1,6 @@
 /**
  * This file contains the code for the function planner tool.
- * 
+ *
  * Future ideas:
  *  - some initial model settings propagate into in-progress model without resetting? (i.e. new functions, into read-only functions, etc)
  *  - a few less parentheses in the type editor string generation (and can dicts nest?)
@@ -29,13 +29,19 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
 /**
  * Initialize the Function Planner in the given root element.
  * @param {HTMLElement|string} rootElem
- * @param {string} planId - Unique identifier for the plan (used for saving in localStorage)
+ * @param {string} planId - Unique identifier for the plan (used for IndexedDB when enabled)
  * @param {object} options - Additional options
  * @param {string} options.title - Title to show at the top of the diagram, optional
  * @param {object} options.initialModel - Initial model to load if no saved model exists, defaults to a basic plan with a single "main" function
  * @param {string[]} options.allowedTypes - List of allowed types for function parameters and returns
  * @param {number} options.minFunctions - Minimum number of functions required (for validation), defaults to 1
+ * @param {number} options.maxFunctions - Maximum number of functions allowed (for validation), defaults to Infinity
  * @param {number} options.minTestable - Minimum number of testable functions required (for validation), defaults to 0
+ * @param {number} options.maxTestable - Maximum number of testable functions allowed (for validation), defaults to Infinity
+ * @param {number} options.minInputFuncs - Minimum number of input-only functions required (for validation), defaults to 0
+ * @param {number} options.maxInputFuncs - Maximum number of input-only functions allowed (for validation), defaults to Infinity
+ * @param {number} options.minOutputFuncs - Minimum number of output-only functions required (for validation), defaults to 0
+ * @param {number} options.maxOutputFuncs - Maximum number of output-only functions allowed (for validation), defaults to Infinity
  * @param {number} options.minModuleDescLength - Minimum length of module description (for validation), defaults to 25
  * @param {number} options.minFuncDescLength - Minimum length of function description (for validation), defaults to 20
  * @param {number} options.minParamDescLength - Minimum length of parameter description (for validation), defaults to 12
@@ -44,6 +50,11 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
  * @param {boolean} options.canClaimFuncs - If true, functions can be "claimed" by one author, colorizing/exporting them separately
  * @param {boolean} options.adminMode - If true, enables admin mode features (nothing is read-only or not shown, allows editing read-only properties)
  * @param {boolean} options.callGraphOnly - If true, hides the module and function inspectors, only shows the call graph (and suppresses most problem checking)
+ * @param {import('yjs').Doc} [options.ydoc] External Y.Doc shared with a WebsocketProvider (server is source of truth)
+ * @param {boolean} [options.useIndexedDB] Local IndexedDB persistence; defaults to false when ydoc is set, otherwise true
+ * @param {boolean} [options.readonly] Global read-only mode (diagram + inspectors still visible)
+ * @param {string} [options.licenseKey] GoJS license key (optional; academic demos may omit)
+ * @returns {{ model: Model, diagram: go.Diagram, destroy: () => void }}
  */
 export default function init(
     rootElem,
@@ -60,12 +71,24 @@ export default function init(
     options.adminMode = options.adminMode ?? false;
     options.callGraphOnly = options.callGraphOnly ?? false;
     options.canClaimFuncs = options.canClaimFuncs ?? false;
+    options.readonly = options.readonly ?? false;
+    options.useIndexedDB = options.useIndexedDB ?? !options.ydoc;
+    options.collaborative = Boolean(options.ydoc) || options.useIndexedDB === false;
     options.theme = localStorage.getItem('func-planner-theme') === 'dark' ? 'dark' : 'light';
 
-    const model = new Model(planId, options.initialModel);
+    if (options.readonly && !options.adminMode) {
+        rootElem.classList.add('func-planner--readonly');
+    }
+
+    const model = new Model(planId, options.initialModel, {
+        ydoc: options.ydoc,
+        useIndexedDB: options.useIndexedDB,
+    });
     const diagram = setupDiagram(rootElem, model, options);
     makeAllButtons(diagram, model, options);
-    setupDragAndDrop(model, options, diagram.div); // TODO: only if not connected to shared Yjs model
+    if (!options.collaborative) {
+        setupDragAndDrop(model, options, diagram.div);
+    }
     setupProblemChecking(model, options);
 
     // Show the appropriate inspector based on selection
@@ -90,4 +113,28 @@ export default function init(
             }
         });
     }
+
+    return {
+        model,
+        diagram,
+        destroy() {
+            try {
+                diagram.div?.querySelectorAll('*');
+                diagram.clear();
+                if (diagram.div?.parentNode) {
+                    diagram.div.parentNode.removeChild(diagram.div);
+                }
+                diagram.div = null;
+            } catch (_) {
+                // diagram may already be torn down
+            }
+            model.destroy();
+            if (rootElem) {
+                rootElem.replaceChildren();
+                rootElem.classList.remove('func-planner', 'dark-mode', 'func-planner--readonly');
+            }
+        },
+    };
 }
+
+export { BASIC_MODEL, DEFAULT_ALLOWED_TYPES, Model };
