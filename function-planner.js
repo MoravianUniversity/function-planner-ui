@@ -50,6 +50,7 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
  * @param {boolean} options.canClaimFuncs - If true, functions can be "claimed" by one author, colorizing/exporting them separately
  * @param {boolean} options.adminMode - If true, enables admin mode features (nothing is read-only or not shown, allows editing read-only properties)
  * @param {boolean} options.callGraphOnly - If true, hides the module and function inspectors, only shows the call graph (and suppresses most problem checking)
+ * @param {boolean} [options.showSaveJSON] If false, hides the Save as JSON toolbar button (default true)
  * @param {import('yjs').Doc} [options.ydoc] External Y.Doc shared with a WebsocketProvider (server is source of truth)
  * @param {boolean} [options.useIndexedDB] Local IndexedDB persistence; defaults to false when ydoc is set, otherwise true
  * @param {boolean} [options.readonly] Global read-only mode (diagram + inspectors still visible)
@@ -73,6 +74,7 @@ export default function init(
     options.adminMode = options.adminMode ?? false;
     options.callGraphOnly = options.callGraphOnly ?? false;
     options.canClaimFuncs = options.canClaimFuncs ?? false;
+    options.showSaveJSON = options.showSaveJSON ?? true;
     options.readonly = options.readonly ?? false;
     options.useIndexedDB = options.useIndexedDB ?? !options.ydoc;
     options.collaborative = Boolean(options.ydoc) || options.useIndexedDB === false;
