@@ -568,53 +568,22 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     opacity: 0.85;
 }
 
-/* Extra host-app FABs (home, leave, …) stacked above settings/theme/help */
-.func-planner .func-planner-extra-fabs {
-    position: absolute;
-    left: 9px;
-    bottom: calc(12px + 3.15rem);
-    z-index: 100;
-    display: flex;
-    flex-direction: column-reverse; /* groups[0] sits closest to built-in cluster */
-    gap: 0.4rem;
-    align-items: flex-start;
-}
-.func-planner .func-planner-extra-fabs-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    align-items: center;
-}
-.func-planner .func-planner-extra-fabs .func-planner-fab {
-    position: static;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 1em;
-    height: 1em;
-    margin: 0;
+/* Extra host-app FABs — same absolute FAB treatment as settings/theme */
+.func-planner .func-planner-extra-fab {
+    z-index: 150;
     padding: 0;
     border: none;
     background: transparent;
     color: var(--text-color);
-    font-size: 1.5em;
-    line-height: 1;
-    cursor: pointer;
 }
-.func-planner .func-planner-extra-fabs .func-planner-fab:disabled {
+.func-planner .func-planner-extra-fab:disabled {
     opacity: 0.45;
     cursor: not-allowed;
 }
-.func-planner .func-planner-extra-fabs .func-planner-fab-icon {
-    display: flex;
-    width: 1em;
-    height: 1em;
-    align-items: center;
-    justify-content: center;
-}
-.func-planner .func-planner-extra-fabs .func-planner-fab-icon svg {
-    width: 1em;
-    height: 1em;
+.func-planner .func-planner-extra-fab svg {
+    width: 1.125em;
+    height: 1.125em;
     fill: currentColor;
     color: inherit;
+    display: block;
 }

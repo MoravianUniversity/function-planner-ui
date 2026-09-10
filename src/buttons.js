@@ -63,49 +63,51 @@ export function makeExtraFabs(parentDiv, groups) {
     if (!Array.isArray(groups) || groups.length === 0) {
         return;
     }
-    const cluster = document.createElement('div');
-    cluster.className = 'func-planner-extra-fabs';
+
+    // Flatten in display order: first group first, within group top→bottom.
+    // Positioned absolutely like settings/theme so they share the same FAB look.
+    const flat = [];
     for (const group of groups) {
-        if (!Array.isArray(group) || group.length === 0) {
+        if (!Array.isArray(group)) {
             continue;
         }
-        const groupEl = document.createElement('div');
-        groupEl.className = 'func-planner-extra-fabs-group';
         for (const fab of group) {
-            if (!fab || !fab.title) {
-                continue;
+            if (fab && fab.title) {
+                flat.push(fab);
             }
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'func-planner-fab';
-            button.title = fab.title;
-            button.setAttribute('aria-label', fab.title);
-            if (fab.disabled) {
-                button.disabled = true;
-            }
-            const iconWrap = document.createElement('div');
-            iconWrap.className = 'func-planner-fab-icon';
-            setFabIcon(iconWrap, fab.icon);
-            button.appendChild(iconWrap);
-            button.addEventListener('click', (e) => {
-                e.preventDefault();
-                if (typeof fab.onClick === 'function') {
-                    fab.onClick(e);
-                }
-            });
-            groupEl.appendChild(button);
-        }
-        if (groupEl.childElementCount > 0) {
-            cluster.appendChild(groupEl);
         }
     }
-    if (cluster.childElementCount > 0) {
-        parentDiv.appendChild(cluster);
+    if (flat.length === 0) {
+        return;
     }
+
+    // settings sits at bottom: calc(15px + 1.5rem); stack extras above it.
+    flat.forEach((fab, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'func-planner-fab func-planner-extra-fab';
+        button.title = fab.title;
+        button.setAttribute('aria-label', fab.title);
+        if (fab.disabled) {
+            button.disabled = true;
+        }
+        // index 0 is nearest settings (just above); later indices go higher
+        button.style.bottom = `calc(15px + 1.5rem + ${(index + 1) * 1.65}rem)`;
+        button.style.left = '9px';
+        setFabIcon(button, fab.icon);
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (typeof fab.onClick === 'function') {
+                fab.onClick(e);
+            }
+        });
+        parentDiv.appendChild(button);
+    });
 }
 
 function setFabIcon(elem, icon) {
     if (icon == null || icon === '') {
+        elem.textContent = '•';
         return;
     }
     const value = String(icon).trim();
@@ -114,7 +116,7 @@ function setFabIcon(elem, icon) {
         return;
     }
     if (value.startsWith('data:image/svg+xml') || value.endsWith('.svg')) {
-        loadSVG(value, elem, '');
+        loadSVG(value, elem, '•');
         return;
     }
     elem.textContent = value;
