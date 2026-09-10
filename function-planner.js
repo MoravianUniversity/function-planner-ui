@@ -29,7 +29,8 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
 /**
  * Initialize the Function Planner in the given root element.
  * @param {HTMLElement|string} rootElem
- * @param {string} planId - Unique identifier for the plan (used for IndexedDB when enabled)
+ * @param {string} planId - Module/plan identifier used for downloads, exports, and IndexedDB when enabled
+ *   (prefer a human-readable base plan id, not a student-plan UUID)
  * @param {object} options - Additional options
  * @param {string} options.title - Title to show at the top of the diagram, optional
  * @param {object} options.initialModel - Initial model to load if no saved model exists, defaults to a basic plan with a single "main" function
