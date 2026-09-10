@@ -81,7 +81,8 @@ export function makeExtraFabs(parentDiv, groups) {
         return;
     }
 
-    // settings sits at bottom: calc(15px + 1.5rem); stack extras above it.
+    // settings sits at bottom: calc(15px + 1.5rem) and extends upward ~1.7rem;
+    // clear that whole cluster, then stack extras upward.
     flat.forEach((fab, index) => {
         const button = document.createElement('button');
         button.type = 'button';
@@ -91,8 +92,8 @@ export function makeExtraFabs(parentDiv, groups) {
         if (fab.disabled) {
             button.disabled = true;
         }
-        // index 0 is nearest settings (just above); later indices go higher
-        button.style.bottom = `calc(15px + 1.5rem + ${(index + 1) * 1.65}rem)`;
+        // index 0 nearest the built-in cluster; later indices go higher
+        button.style.bottom = `calc(15px + 3.75rem + ${index * 1.7}rem)`;
         button.style.left = '9px';
         setFabIcon(button, fab.icon);
         button.addEventListener('click', (e) => {
