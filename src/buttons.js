@@ -43,11 +43,26 @@ export function makeAllButtons(diagram, model, options={}) {
     makeInstructionsButton(parentDiv);
     makeWidgetButtons(parentDiv, diagram, model, options);
     makeInfoBox(diagram.div, model, options); // use diagram.div so that it can move with the resized inspector pane
+    return makeShellActionsHost(parentDiv);
+}
+
+/**
+ * Empty host for shell/app FABs (home, leave, etc.) stacked above the built-in
+ * theme/settings/help cluster in the bottom-left.
+ * @param {HTMLElement} parentDiv
+ * @returns {HTMLElement}
+ */
+export function makeShellActionsHost(parentDiv) {
+    const host = document.createElement('div');
+    host.className = 'func-planner-shell-fabs';
+    host.setAttribute('data-func-planner-shell-actions', '');
+    parentDiv.appendChild(host);
+    return host;
 }
 
 function makeWidgetButtons(parentDiv, diagram, model, options={}) {
     const isMac = isMacOS()
-    const ctrl = isMac ? '⌘' : 'CTRL+'
+    const ctrl = isMac ? '⌘' : 'CTRL+';
     const globalReadonly = Boolean(options.readonly) && !options.adminMode;
     const collaborative = Boolean(options.collaborative);
 

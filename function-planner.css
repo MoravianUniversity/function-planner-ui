@@ -567,3 +567,40 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     pointer-events: none;
     opacity: 0.85;
 }
+
+/* Host-app action FABs (home, leave, …) stacked above settings/theme/help */
+.func-planner .func-planner-shell-fabs {
+    position: absolute;
+    left: 9px;
+    bottom: calc(15px + 3.25rem);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    align-items: center;
+}
+.func-planner .func-planner-shell-fabs .func-planner-fab {
+    position: static;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5em;
+    height: 1.5em;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    font-size: 1.5em;
+    line-height: 1;
+    cursor: pointer;
+}
+.func-planner .func-planner-shell-fabs .func-planner-fab:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.func-planner .func-planner-shell-fabs .func-planner-fab svg {
+    width: 0.85em;
+    height: 0.85em;
+    fill: currentColor;
+}

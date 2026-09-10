@@ -85,7 +85,7 @@ export default function init(
         useIndexedDB: options.useIndexedDB,
     });
     const diagram = setupDiagram(rootElem, model, options);
-    makeAllButtons(diagram, model, options);
+    const shellActionsEl = makeAllButtons(diagram, model, options);
     if (!options.collaborative) {
         setupDragAndDrop(model, options, diagram.div);
     }
@@ -117,6 +117,8 @@ export default function init(
     return {
         model,
         diagram,
+        /** @type {HTMLElement} Slot for host-app FABs (home/leave); bottom-left above built-in controls. */
+        shellActionsEl,
         destroy() {
             try {
                 diagram.div?.querySelectorAll('*');
