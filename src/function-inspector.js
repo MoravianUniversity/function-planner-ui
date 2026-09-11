@@ -5,7 +5,7 @@
 import Sortable from 'sortablejs';
 import Swal from 'sweetalert2';
 
-import { wrapWithLabel, makeCheckbox, makeTextarea, makeCodeEditorWithShowCheckbox, makeReadOnlySelect, makeProblemsDiv, isReadOnly } from './inspector.js';
+import { wrapWithLabel, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly } from './inspector.js';
 import { loadSVG, makeOption, makeAddButton, makeRemoveButton } from './utils.js';
 
 import TypeEditor from './type-editor.js';
@@ -31,16 +31,22 @@ export function makeFunctionInspector(model, options) {
             if (actualKey === key) { listener(value, prop, key); }
         });
     }
+    function effectiveReadOnly() {
+        if (options.adminMode) { return false; }
+        const name = model.functions.get(key)?.get('name')?.toString() ?? '';
+        return resolveFunctionReadOnly(name, options.functionReadOnly);
+    }
     function listenRO(property, listener) {
         if (options.adminMode) { listener(false); }
         else {
-            model.addFuncListener('readOnly', (actualKey, _, value) => {
-                if (actualKey === key) { listener(isReadOnly(value ?? false, property)); }
+            // Policy comes from PlanConfig + function name (not model.readOnly).
+            model.addFuncListener('name', (actualKey) => {
+                if (actualKey === key) { listener(isReadOnly(effectiveReadOnly(), property)); }
             });
         }
     }
 
-    const funcs = { set, add, remove, move, listen, listenRO };
+    const funcs = { set, add, remove, move, listen, listenRO, effectiveReadOnly };
 
     function setKey(newKey) {
         if (key === newKey) { return; }
@@ -68,15 +74,13 @@ export function makeFunctionInspector(model, options) {
                 }
             });
         }),
-        makeCodeEditorWithShowCheckbox(options, 'code', funcs,
-            'Function Code', '# Write your function code here\n'),
-        makeCodeEditorWithShowCheckbox(options, 'testCode', funcs,
-            'Test Code', '# Write your test code here\n')
+        makeCodeEditorWithVisibility(options, 'code', funcs,
+            'Function Code', '# Write your function code here\n',
+            { namePatternOption: 'showCodeFor' }),
+        makeCodeEditorWithVisibility(options, 'testCode', funcs,
+            'Test Code', '# Write your test code here\n',
+            { namePatternOption: 'showTestCodeFor' })
     );
-    if (options.adminMode) {
-        div.appendChild(makeReadOnlySelect(funcs,
-            ['name', 'params', 'returns', 'desc', 'io', 'testable', 'owner', 'code', 'testCode', 'calls', 'callsInto', 'callsOutOf']));
-    }
 
     return [div, setKey];
 }
@@ -287,7 +291,7 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
                     const box = makeVarBox(model, options, hasName);
                     list.appendChild(box);
                     if (!options.adminMode) {
-                        updateItemRO(box, i, model.functions.get(key).get('readOnly') ?? false);
+                        updateItemRO(box, i, funcs.effectiveReadOnly());
                     }
                 }
                 // update all boxes
@@ -307,11 +311,10 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
         }
     });
 
-    // readonly listeners
-    // cannot use funcs.listenRO here because we need to set up multiple listeners for each property
+    // readonly listeners — PlanConfig rules keyed by function name
     if (!options.adminMode) {
-        funcs.listen('readOnly', (value) => {
-            const ro = value ?? false;
+        funcs.listen('name', () => {
+            const ro = funcs.effectiveReadOnly();
             const masterRO = isReadOnly(ro, property);
             div.classList.toggle("func-vars-readonly", masterRO);
             initAdd.classList.toggle("func-button-disabled", masterRO);

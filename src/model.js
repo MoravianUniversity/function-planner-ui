@@ -26,10 +26,19 @@ import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import diff from 'fast-diff';
 
-const MODEL_DATA_TEXTS = ['documentation', 'testDocumentation', 'globalCode'];
+const MODEL_DATA_TEXTS = ['documentation', 'testDocumentation', 'globalCode', 'testGlobalCode'];
 const MODEL_DATA_ARRAYS = ['authors']; // NOTE: this assumes array of strings, not array of anything like in functions
+/** Former modelData policy flags — now PlanConfig only; ignored on import/export. */
+const LEGACY_MODEL_DATA_KEYS = [
+    'showTestDocumentation',
+    'showGlobalCode',
+    'showTestGlobalCode',
+    'readOnly',
+];
 const FUNC_DATA_TEXTS = ['name', 'desc', 'code', 'testCode'];
 const FUNC_DATA_ARRAYS = ['params', 'returns'];
+/** Former per-function policy flags — now PlanConfig only; ignored on import/export. */
+const LEGACY_FUNC_KEYS = ['readOnly', 'showCode', 'showTestCode'];
 
 export class Model {
     #ownsDoc = false;
@@ -123,11 +132,14 @@ export class Model {
      * @returns {object} exported model data
      */
     exportModel() {
+        const modelData = { ...this.modelData.toJSON() };
+        for (const key of LEGACY_MODEL_DATA_KEYS) { delete modelData[key]; }
         return {
-            ...this.modelData.toJSON(),
+            ...modelData,
             functions: Array.from(this.functions.entries()).map(([key, ymap]) => {
                 const func = ymap.toJSON();
                 func.key = key;
+                for (const legacy of LEGACY_FUNC_KEYS) { delete func[legacy]; }
                 return func;
             }),
             calls: Array.from(this.calls.keys()).map(callKey => callKey.split('-')).map(
@@ -147,9 +159,9 @@ export class Model {
             this.functions.clear();
             this.calls.clear();
 
-            // import modelData
+            // import modelData (skip content keys handled below and legacy PlanConfig fields)
             for (const [prop, value] of Object.entries(data || {})) {
-                if (['functions', 'calls'].includes(prop)) { continue; }
+                if (['functions', 'calls', ...LEGACY_MODEL_DATA_KEYS].includes(prop)) { continue; }
                 this.updateModelData(prop, value);
             }
 
@@ -291,12 +303,9 @@ export class Model {
     //    testDocumentation (Y.Text)
     //    globalCode (Y.Text)
     //    testGlobalCode (Y.Text)
-    // TODO: move these to config and out of the model
-    //    showTestDocumentation (boolean)
-    //    showGlobalCode (boolean)
-    //    showTestGlobalCode (boolean)
-    //    readOnly (boolean or array of fixed strings)
+    // Show/readOnly policies live in PlanConfig options (not model data).
     updateModelData(property, value, cursorPos=null) {
+        if (LEGACY_MODEL_DATA_KEYS.includes(property)) { return; }
         if (MODEL_DATA_TEXTS.includes(property)) {
             updateText(this.modelData, property, value, cursorPos);
         } else if (MODEL_DATA_ARRAYS.includes(property)) {
@@ -496,12 +505,14 @@ export class Model {
     convertFuncData(data) {
         if (data instanceof Y.Map) { return data; }
         if (data instanceof Map) { data = Object.fromEntries(data); }
-        return new Y.Map(Object.entries(data).map(([prop, val]) => {
-            const yval = FUNC_DATA_TEXTS.includes(prop) ? new Y.Text(val) :
-                    FUNC_DATA_ARRAYS.includes(prop) ? Y.Array.from(val.map(this.convertFuncData)) :
-                    val;
-            return [prop, yval];
-        }));
+        return new Y.Map(Object.entries(data)
+            .filter(([prop]) => !LEGACY_FUNC_KEYS.includes(prop))
+            .map(([prop, val]) => {
+                const yval = FUNC_DATA_TEXTS.includes(prop) ? new Y.Text(val) :
+                        FUNC_DATA_ARRAYS.includes(prop) ? Y.Array.from(val.map(this.convertFuncData)) :
+                        val;
+                return [prop, yval];
+            }));
     }
 
     #updateFuncProp(map, property, value, cursorPos=null) {
@@ -567,11 +578,9 @@ export class Model {
     //    io (fixed string)
     //    testable (boolean)
     //    owner (string)
-    // TODO: move these to config and out of the model, and make more generic?
-    //    showCode (boolean)
-    //    showTestCode (boolean)
-    //    readOnly (boolean or array of fixed strings)
+    // showCode / showTestCode / readOnly are PlanConfig (not stored on functions)
     updateFunc(key, property, value, cursorPos=null) {
+        if (LEGACY_FUNC_KEYS.includes(property)) { return; }
         const func = this.functions.get(key);
         if (!func) { console.error(`Function with key ${key} does not exist`); return; }
         if (FUNC_DATA_ARRAYS.some(arr => property.startsWith(arr))) {

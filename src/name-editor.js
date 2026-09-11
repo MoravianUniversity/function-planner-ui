@@ -22,7 +22,7 @@ export function makeNameEditor(model, options) {
             textEditor: functionNameEditor(model, options),
             textEdited: (tb, oldText, newText) => handleNameEdited(model, tb, oldText, newText),
         }).theme('stroke', 'stroke').theme('font', 'text')
-            .bind('editable', 'readOnly', (readOnly) => !isReadOnly(readOnly, 'name'))
+            .bind('editable', 'readOnly', (readOnly) => !isReadOnly(readOnly, 'name', options))
             .bindTwoWay('text', 'name',
                 (name, tb) => name || 'function',
                 (name, data, model) => {
@@ -131,7 +131,7 @@ function functionNameEditor(model, options) {
         activeTextBlock = textBlock;
         activeDiagram = diagram;
         activeTool = tool;
-        input.readOnly = isReadOnly(data.readOnly ?? false, 'name');
+        input.readOnly = isReadOnly(data.readOnly ?? false, 'name', options);
         input.placeholder = 'function';
         input.value = isBlankFunctionName(data.name) ? '' : data.name;
         div.style.backgroundColor = `color-mix(in srgb, var(--bg-${data.testable ? 'testable' : (data.io || 'none')}-color) 70%, var(--text-color))`;

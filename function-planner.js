@@ -53,6 +53,13 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
  * @param {boolean} options.callGraphOnly - If true, hides the module and function inspectors, only shows the call graph (and suppresses most problem checking)
  * @param {boolean} [options.showSaveJSON] Show Save as JSON (default: true when local, false when collaborative)
  * @param {boolean} [options.showLoadJSON] Show Load from JSON (default: true when local, false when collaborative)
+ * @param {boolean} [options.showTestDocumentation] Show module test documentation (default: false)
+ * @param {boolean} [options.showGlobalCode] Show module global code editor (default: false)
+ * @param {boolean} [options.showTestGlobalCode] Show test global code editor (default: false)
+ * @param {string} [options.showCodeFor] Regex of function names that show function code (default: "")
+ * @param {string} [options.showTestCodeFor] Regex of function names that show test code (default: "")
+ * @param {boolean|string[]} [options.moduleReadOnly] Module field read-only policy (true=all, false=none, or field names)
+ * @param {{ for: string, fields: true|string[] }[]} [options.functionReadOnly] Per-function read-only rules (regex + fields)
  * @param {string[]|null} [options.externalAuthors] When non-null (collaborative hosts),
  *   authors are locked to this list (typically plan members) instead of free-text entry.
  * @param {import('yjs').Doc} [options.ydoc] External Y.Doc shared with a WebsocketProvider (server is source of truth)
@@ -85,6 +92,13 @@ export default function init(
     // Local demos default to Save/Load JSON on; collaborative hosts opt in explicitly.
     options.showSaveJSON = options.showSaveJSON ?? !options.collaborative;
     options.showLoadJSON = options.showLoadJSON ?? !options.collaborative;
+    options.showTestDocumentation = options.showTestDocumentation ?? false;
+    options.showGlobalCode = options.showGlobalCode ?? false;
+    options.showTestGlobalCode = options.showTestGlobalCode ?? false;
+    options.showCodeFor = options.showCodeFor ?? '';
+    options.showTestCodeFor = options.showTestCodeFor ?? '';
+    options.moduleReadOnly = options.moduleReadOnly ?? false;
+    options.functionReadOnly = options.functionReadOnly ?? [];
     options.extraFabs = options.extraFabs ?? [];
     options.theme = localStorage.getItem('func-planner-theme') === 'dark' ? 'dark' : 'light';
 

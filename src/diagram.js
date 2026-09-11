@@ -6,6 +6,7 @@ import { makeNameEditor, isBlankFunctionName } from './name-editor.js';
 import { pythonDefLine } from './save-load.js';
 import { updateAllProblems, updateInterNodeProblems, willFuncBecomeRecursive } from './problem-checker.js';
 import { ALLOW_RECURSIVE, SHOW_COLLAPSE_BUTTON } from './settings.js';
+import { resolveFunctionReadOnly } from './inspector.js';
 
 const DEFAULTS = {
     'name': '',
@@ -40,6 +41,10 @@ export function setupDiagram(
         go.Diagram.licenseKey = options.licenseKey;
     }
     const globalReadonly = Boolean(options.readonly) && !options.adminMode;
+    function effectiveNodeReadOnly(name) {
+        if (options.adminMode) { return false; }
+        return resolveFunctionReadOnly(name?.toString() ?? '', options.functionReadOnly);
+    }
     const diagram = new go.Diagram(diagramDiv, {
         allowCopy: false,
         allowMove: false,
@@ -300,7 +305,9 @@ export function setupDiagram(
     });
     model.addFuncAddListener((key, data, local) => {
         if (!('name' in data) || isBlankFunctionName(data.name)) { data.name = 'function'; }
-        diagram.model.addNodeData({ key: key, ...data });
+        // PlanConfig owns per-function readOnly; ignore any value from the collaborative model.
+        const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name) };
+        diagram.model.addNodeData(nodeData);
         if (options.canClaimFuncs && data.owner) {
             setGroup(diagram.findNodeForKey(key), data.owner);
         }
@@ -321,11 +328,18 @@ export function setupDiagram(
     model.addFuncListener('', (key, property, newValue) => {
         const node = diagram.findNodeForKey(key);
         if (node) {
+            if (property === 'readOnly') {
+                // Ignore collaborative model readOnly; policy is PlanConfig.functionReadOnly.
+                return;
+            }
             newValue = newValue ?? DEFAULTS[property]; // ensure no undefined/null values
             if (property === 'name') {
                 newValue = newValue?.toString()?.trim();
                 // name has issues if set to empty string
                 if (newValue === '') { newValue = 'function'; }
+                diagram.model.setDataProperty(node.data, property, newValue);
+                diagram.model.setDataProperty(node.data, 'readOnly', effectiveNodeReadOnly(newValue));
+                return;
             } else if (property === 'owner' && options.canClaimFuncs) {
                 newValue = newValue?.toString()?.trim();
                 maybeRemoveGroup(node);

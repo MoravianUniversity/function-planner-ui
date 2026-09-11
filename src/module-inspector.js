@@ -3,7 +3,7 @@
  * when no function is selected.
  */
 
-import { wrapWithLabel, makeCheckbox, makeTextarea, makeReadOnlySelect, makeCodeEditorWithShowCheckbox, makeProblemsDiv, isReadOnly } from './inspector.js';
+import { wrapWithLabel, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly } from './inspector.js';
 import { DEFAULT_PROGRAM_HEADER } from './save-load.js';
 import { makeAddButton, makeRemoveButton } from './utils.js';
 
@@ -21,9 +21,7 @@ export function makeModuleInspector(model, options) {
     function listenRO(property, listener) {
         if (options.adminMode) { listener(false); }
         else {
-            model.addModelDataListener('readOnly', (_, value) => {
-                listener(isReadOnly(value ?? false, property));
-            });
+            listener(isReadOnly(options.moduleReadOnly ?? false, property));
         }
     }
     const funcs = {set, listen, listenRO};
@@ -34,15 +32,8 @@ export function makeModuleInspector(model, options) {
         makeAuthorNames(model, options, funcs),
         makeTestDocumentation(model, options, funcs)
     );
-    if (options.adminMode) {
-        div.appendChild(makeShowTestDocumentationCheckbox(funcs));
-    }
     div.appendChild(makeGlobalCodeEditor(options, funcs));
     div.appendChild(makeTestGlobalCodeEditor(options, funcs));
-    if (options.adminMode) {
-        div.appendChild(makeReadOnlySelect(funcs,
-            ['documentation', 'testDocumentation', 'globalCode', 'testGlobalCode']));
-    }
     div.appendChild(makeProblemsDiv((listener) => model.addModelDataListener('problems', listener)));
 
     model.fireModelDataListeners();
@@ -190,24 +181,22 @@ function makeTestDocumentation(model, options, funcs) {
     if (!options.adminMode) {
         function toggleShowing() {
             const hasTestable = Array.from(model.functions.values()).some(n => n.get('testable'));
-            label.style.display = hasTestable && model.modelData.get('showTestDocumentation') ? '' : 'none';
+            label.style.display = hasTestable && options.showTestDocumentation ? '' : 'none';
         }
-        funcs.listen('showTestDocumentation', toggleShowing);
         model.addFuncListener('testable', toggleShowing);
+        toggleShowing();
     }
     return label;
 }
 
-function makeShowTestDocumentationCheckbox(funcs) {
-    return wrapWithLabel(makeCheckbox('showTestDocumentation', funcs), 'Show Test Documentation: ');
-}
-
 function makeGlobalCodeEditor(options, funcs) {
-    return makeCodeEditorWithShowCheckbox(options, 'globalCode', funcs,
-        'Global Code', '# Write your module-level code here (e.g. imports)\n');
+    return makeCodeEditorWithVisibility(options, 'globalCode', funcs,
+        'Global Code', '# Write your module-level code here (e.g. imports)\n',
+        { showFromOptions: 'showGlobalCode' });
 }
 
 function makeTestGlobalCodeEditor(options, funcs) {
-    return makeCodeEditorWithShowCheckbox(options, 'testGlobalCode', funcs,
-        'Test Global Code', '# Write code here to set up your tests (e.g. test imports, helper functions)\n');
+    return makeCodeEditorWithVisibility(options, 'testGlobalCode', funcs,
+        'Test Global Code', '# Write code here to set up your tests (e.g. test imports, helper functions)\n',
+        { showFromOptions: 'showTestGlobalCode' });
 }

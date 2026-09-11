@@ -396,14 +396,17 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     select.func-io, select.func-owner { field-sizing: content; }
     .func-code-box textarea { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.9em; white-space: pre; tab-size: 4; }
     .func-code-box textarea::placeholder { color: #aaa; }
-    .func-code-box label, label:has(textarea) {
+    .func-code-box label {
         font-weight: bold; display: block; margin-bottom: 0.25em; margin-top: 1em; font-size: 1.1em;
-        span { width: auto; }
+    }
+    /* Title spans only — do not inherit bold/size into nested textareas (e.g. test documentation). */
+    label:has(> textarea) {
+        display: block; margin-bottom: 0.25em; margin-top: 1em;
+        > span { width: auto; font-weight: bold; font-size: 1.1em; }
     }
 
-    label:has(.func-testable:not(:checked)) ~ .func-code-box:has(.func-testCode) { display: none; }
-    label:has(.func-testable:checked) ~ .func-code-box:has(.func-testCode) { display: block; }
-    label:has(input[class*="func-show"]) { margin-top: 0; font-size: 0.8em; font-weight: normal; span { font-weight: normal; } }
+    label:has(.func-testable:not(:checked)) ~ .func-code-box:has(.func-testCode) { display: none !important; }
+    /* Showing test code when testable is gated by PlanConfig showTestCodeFor (JS), not forced here. */
 
     /* Add and Remove Buttons */
     .func-button {
@@ -441,22 +444,6 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
         .func-author-row:nth-child(5n+4) input { background-color: var(--group-4-color); }
         .func-author-row:nth-child(5n+5) input { background-color: var(--group-5-color); }
     }
-
-    /* Function admin mode options */
-    .func-readonly {
-        label:first-of-type span { width: 5.5em; }
-        label:not(:first-of-type) {
-            display: none;
-            margin-left: 5.5em;
-            width: auto;
-            span { font-weight: normal; }
-        }
-        label:has(option[value="custom"]:checked) ~ label:not(:first-of-type) {
-            display: block;
-        }
-    }
-    label:has(input[type="checkbox"]:not(.func-testable)) span { width: auto; }
-    .func-readonly + label { margin-top: 0em !important; }
 
     /* Function params/returns */
     .func-var { margin: 0.75em 0; padding: 0.5em; padding-left: 0.6em; border: 1px solid var(--stroke-color); border-radius: 0.5em; background-color: var(--insp-var-background-color); position: relative; box-shadow: 0 0 0.5em var(--shadow-color); }

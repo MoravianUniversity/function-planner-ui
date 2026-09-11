@@ -5,8 +5,6 @@
 import Prism from "prismjs";
 import 'prismjs/components/prism-python.min.js';
 
-import { makeOption } from "./utils.js";
-
 /**
  * Sets up a resizable inspector div next to the diagram div.
  * @param {HTMLElement} diagramDiv - the diagram div
@@ -224,99 +222,99 @@ export function makeCodeEditor(field, funcs,
 }
 
 /**
- * Creates a code editor for a particular field with an optional checkbox to show/hide it.
- * If the field is read-only, it creates a syntax-highlighted div instead of a textarea. The
- * checkbox is only shown in admin mode.
+ * Creates a code editor for a particular field with PlanConfig-driven visibility.
+ * If the field is read-only, it creates a syntax-highlighted div instead of a textarea.
+ * Visibility can come from:
+ * - PlanConfig boolean via `visibility.showFromOptions` (module-level)
+ * - PlanConfig name regex via `visibility.namePatternOption` (per-function code/tests)
+ * Admin mode always shows the editor.
  * @param {object} options
  * @param {string} field 
  * @param {{set: function, listen: function, listenRO: function}} funcs
  * @param {string} title 
- * @param {string} placeholder 
+ * @param {string} placeholder
+ * @param {{ showFromOptions?: string, namePatternOption?: string }} [visibility]
  */
-export function makeCodeEditorWithShowCheckbox(options, field, funcs, title, placeholder) {
-    const showField = `show${field.charAt(0).toUpperCase() + field.slice(1)}`;
+export function makeCodeEditorWithVisibility(options, field, funcs, title, placeholder, visibility={}) {
+    const showFromOptions = visibility.showFromOptions;
+    const namePatternOption = visibility.namePatternOption;
     const div = makeCodeEditor(field, funcs, title, placeholder);
     if (options.adminMode) {
-        div.appendChild(wrapWithLabel(makeCheckbox(showField, funcs), `Show ${title}:`));
+        // Template authors always see editors; visibility for students is PlanConfig.
     } else {
-        let showing = false, val = '', ro = false;
+        let showing = false, val = '', ro = false, funcName = '';
         function updateVisibility() { div.style.display = showing && (val || !ro) ? '' : 'none'; }
-        funcs.listen(showField, (value) => { showing = value; updateVisibility(); });
+        function refreshShowing() {
+            if (namePatternOption) {
+                showing = functionNameMatchesPattern(funcName, options[namePatternOption]);
+            } else if (showFromOptions) {
+                showing = Boolean(options[showFromOptions]);
+            }
+            updateVisibility();
+        }
+        if (namePatternOption) {
+            funcs.listen('name', (value) => {
+                funcName = value?.toString() || '';
+                refreshShowing();
+            });
+        } else if (showFromOptions) {
+            refreshShowing();
+        }
         funcs.listen(field, (value) => { val = value?.toString() || ''; updateVisibility(); });
         funcs.listenRO(field, (readOnly) => { ro = readOnly; updateVisibility(); });
+        updateVisibility();
     }
     return div;
 }
 
-/**
- * Creates a read-only select element for choosing which parts of the data are read-only.
- * @param {{set: function, listen: function}} funcs
- * @param {string[]} possibleTypes 
- * @returns {HTMLElement} the container div with the select and checkboxes
- */
-export function makeReadOnlySelect(funcs, possibleTypes) {
-    // TODO: doesn't support individual params or returns
-    // TODO: calls/callsInto/callsOutOf should be specially handled
-
-    let container = document.createElement('div');
-    container.className = 'func-readonly';
-
-    const select = document.createElement('select');
-    select.append(makeOption('all'), makeOption('none'), makeOption('custom'));
-    container.appendChild(wrapWithLabel(select, 'Readonly:'));
-
-    const checkboxes = [];
-    for (const type of possibleTypes) {
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.name = `readonly-${type}`;
-        cb.value = type;
-
-        const label = document.createElement('label');
-        const span = document.createElement('span');
-        span.textContent = type;
-        label.append(cb, span);
-        container.appendChild(label);
-        checkboxes.push(cb);
+/** Empty/invalid patterns match nothing. */
+function functionNameMatchesPattern(name, pattern) {
+    const raw = typeof pattern === 'string' ? pattern.trim() : '';
+    if (!raw) { return false; }
+    try {
+        return new RegExp(raw).test(name);
+    } catch {
+        return false;
     }
-
-    function setReadOnly() {
-        funcs.set('readOnly',
-            select.value !== 'custom' ? select.value === 'all' :
-                checkboxes.filter(cb => cb.checked).map(cb => cb.value)
-        );
-    }
-    select.addEventListener('change', setReadOnly);
-    checkboxes.forEach(cb => cb.addEventListener('change', setReadOnly));
-
-    funcs.listen('readOnly', (value) => {
-        value = value ?? false;
-        if (value === true || value === false) {
-            select.value = value ? 'all' : 'none';
-            for (const cb of checkboxes) { cb.checked = value; }
-        } else {
-            select.value = 'custom';
-            for (const cb of checkboxes) { cb.checked = value.includes(cb.value); }
-        }
-    });
-
-    return container;
 }
 
 /**
- * Checks if a particular part of the data is read-only. The data.readOnly field can be a boolean
- * (overall read-only) or an array of strings of read only parts.
+ * Effective per-function read-only from PlanConfig.functionReadOnly rules.
+ * Matching rules merge: true wins; otherwise field names are unioned.
+ * @param {string} name
+ * @param {{ for: string, fields: true|string[] }[]|null|undefined} rules
+ * @returns {boolean|string[]}
+ */
+export function resolveFunctionReadOnly(name, rules) {
+    if (!Array.isArray(rules) || rules.length === 0) { return false; }
+    const fields = new Set();
+    for (const rule of rules) {
+        if (!rule || typeof rule.for !== 'string' || !functionNameMatchesPattern(name, rule.for)) {
+            continue;
+        }
+        if (rule.fields === true) { return true; }
+        if (Array.isArray(rule.fields)) {
+            for (const field of rule.fields) { fields.add(field); }
+        }
+    }
+    return fields.size === 0 ? false : [...fields];
+}
+
+/**
+ * Checks if a particular part of a read-only policy applies.
+ * Policy is a boolean (all/none) or an array of field names from PlanConfig
+ * (moduleReadOnly / resolveFunctionReadOnly).
  * The part/type can be:
- *      one of the fields: 'name', 'params', 'returns', 'desc', 'io', 'testable', 'code'
+ *      one of the fields: 'name', 'params', 'returns', 'desc', 'io', 'testable', 'code', …
  *      one of the sub-fields: 'params.{name}', 'params[{index}]', 'returns[{index}]'
- *      one of the special values: 'calls' (both in or out), 'callsInto', 'callsOutOf'
- * For modules, type can be one of 'documentation', 'testDocumentation', 'globalCode'
- * @param {object|Y.Map|boolean|array} data either the data object or the readOnly field
- * @param {string} type 
+ *      one of the special values: 'calls', 'callsInto', 'callsOutOf'
+ *      module fields: 'documentation', 'testDocumentation', 'globalCode', 'testGlobalCode'
+ * @param {boolean|string[]} policy
+ * @param {string} type
+ * @param {{ adminMode?: boolean }} [options]
  * @returns {boolean} whether the type is read-only
  */
-export function isReadOnly(data, type, options={}) {
+export function isReadOnly(policy, type, options={}) {
     if (options.adminMode) { return false; }
-    const ro =  data.get ? data.get('readOnly') : (data.readOnly !== undefined ? data.readOnly : data);
-    return (ro === true || (Array.isArray(ro) && ro.includes(type)));
+    return (policy === true || (Array.isArray(policy) && policy.includes(type)));
 }

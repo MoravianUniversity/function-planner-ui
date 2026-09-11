@@ -40,8 +40,6 @@ trigram_story = generate_words_from_trigrams(trigrams, 100)
 if len(trigram_story) != 100:
     print("ERROR: Trigam story is not 100 words long")
 print(' '.join(trigram_story))`,
-                showCode: true,
-                readOnly: ['name', 'desc', 'params', 'returns', 'io', 'testable', 'code'],
             }
         ],
         calls: []
@@ -52,6 +50,13 @@ print(' '.join(trigram_story))`,
             minFunctions: 6,
             minTestable: 4,
             adminMode: false,
+            showCodeFor: '^main$',
+            functionReadOnly: [
+                {
+                    for: '^main$',
+                    fields: ['name', 'desc', 'params', 'returns', 'io', 'testable', 'code'],
+                },
+            ],
         });
     });
     </script>
