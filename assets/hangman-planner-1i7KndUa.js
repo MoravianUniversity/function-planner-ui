@@ -1,10 +1,10 @@
-import{i as e}from"./function-planner-BjiJ4D_G.js";import"./ui-yMus3xAk.js";import"./yjs-DLZ4IDYl.js";const s={functions:[{key:1,name:"main",io:"indirect",code:`# Get the random word from the list of words
+import{i as e}from"./function-planner-DEPTSx9-.js";import"./ui-yMus3xAk.js";import"./yjs-DLZ4IDYl.js";const s={functions:[{key:1,name:"main",io:"indirect",code:`# Get the random word from the list of words
 word = select_word()
 # Play the game and print out the final results
 if play_game(word):
     print(f"Congratulations! The word was '{word}'")
 else:
-    print(f"Too many mistakes... The word was '{word}'")`},{key:2,name:"read_words",desc:"Read all of the words from the given file into a list.",params:[{name:"filename",type:"str",desc:"the name of the file to get the words from"}],returns:[{type:"list of str",desc:"the words from the file"}],code:`with open(filename) as file:
+    print(f"Too many mistakes... The word was '{word}'")`},{key:2,name:"read_words",desc:"Read all of the words from the given file into a list.",params:[{name:"filename",type:"str",desc:"the name of the file to get the words from"}],returns:[{type:"list[str]",desc:"the words from the file"}],code:`with open(filename) as file:
     return file.read().split()`},{key:3,name:"play_game",desc:"Play a game with the given word (and return True if the user won (guessed the word) and False if the user lost (made 5 mistakes).",params:[{name:"word",type:"str",desc:"the word that is being guessed"}],returns:[{type:"bool",desc:"True if the user won the game, False otherwise"}],io:"indirect",code:`# Create a word that is the same length as word but is all _ characters
 guessed_word = "_" * len(word)
 

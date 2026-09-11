@@ -1,4 +1,4 @@
-import{i as e}from"./function-planner-BjiJ4D_G.js";import"./ui-yMus3xAk.js";import"./yjs-DLZ4IDYl.js";window.addEventListener("DOMContentLoaded",()=>{e("planner","number-guess",{initialModel:{functions:[{key:1,name:"main",io:"indirect",code:`user_name = input("What's your name? ")
+import{i as e}from"./function-planner-DEPTSx9-.js";import"./ui-yMus3xAk.js";import"./yjs-DLZ4IDYl.js";window.addEventListener("DOMContentLoaded",()=>{e("planner","number-guess",{initialModel:{functions:[{key:1,name:"main",io:"indirect",code:`user_name = input("What's your name? ")
 play_one_game(user_name)`},{key:2,name:"get_guess_outcome",desc:"Checks a guessed number against an actual value, returning a value based on if it is less than, more than, or equal to the actual value. It also looks for values that are 'not even close'.",params:[{name:"guessed",type:"int",desc:"the guessed number"},{name:"actual",type:"int",desc:"the actual number to be guessed (i.e. the answer)"}],returns:[{type:"str",desc:"the message to show"}],io:"none",testable:!0,code:`diff = guessed - actual
 if diff < 0:
     return 'Your guess was too low.'
@@ -39,4 +39,4 @@ while not correct:
 # Display the results
 display_result(user_name, num_guesses)
 
-return num_guesses`}],calls:[{from:1,to:3}]},allowedTypes:["int","float","str","bool","list"],minFunctions:7,minTestable:1,minInputFunctions:2,maxInputFunctions:2,minOutputFunctions:4,maxOutputFunctions:4,adminMode:!1,showCodeFor:"^(main|get_guess_outcome|play_one_game)$",showTestCodeFor:"^get_guess_outcome$",functionReadOnly:[{for:"^main$",fields:!0},{for:"^(get_guess_outcome|play_one_game)$",fields:["name","desc","params","returns","io","testable","code"]},{for:"^get_guess_outcome$",fields:["testCode"]}]})});
+return num_guesses`}],calls:[{from:1,to:3}]},allowedTypes:["int","float","str","bool","list"],minFunctions:7,minTestable:1,minInputFuncs:2,maxInputFuncs:2,minOutputFuncs:4,maxOutputFuncs:4,adminMode:!1,showCodeFor:"^(main|get_guess_outcome|play_one_game)$",showTestCodeFor:"^get_guess_outcome$",functionReadOnly:[{for:"^main$",fields:!0},{for:"^(get_guess_outcome|play_one_game)$",fields:["name","desc","params","returns","io","testable","code"]},{for:"^get_guess_outcome$",fields:["testCode"]}]})});
