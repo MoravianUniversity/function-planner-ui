@@ -12,11 +12,164 @@ const DEFAULTS = {
     'name': '',
     'params': [],
     'returns': [],
-    'description': '',
+    'desc': '',
     'code': '',
     'io': 'none',
     'testable': false,
     'readOnly': false,
+}
+
+/** Layered digraph layout that honors per-node `sequence` instead of reducing crossings. */
+class OrderedLayeredDigraphLayout extends go.LayeredDigraphLayout {
+    doLayout(coll) {
+        // Remote connect/reorder can run layout before TextBlocks are measured (esp. blank → "function").
+        const diagram = this.diagram;
+        if (diagram) {
+            diagram.nodes.each((n) => {
+                if (n instanceof go.Node && n.isLayoutPositioned && !n.data?.isGroup) {
+                    n.ensureBounds();
+                }
+            });
+        }
+        super.doLayout(coll);
+    }
+
+    reduceCrossings() {
+        // no-op: keep initializeIndices order (sequence + sibling clusters) stable
+    }
+
+    initializeIndices() {
+        super.initializeIndices();
+        const byLayer = [];
+        const it = this.network.vertexes.iterator;
+        while (it.next()) {
+            const v = it.value;
+            (byLayer[v.layer] ??= []).push(v);
+        }
+        // Top layers first (higher layer index) so children can use updated parent indices.
+        for (let layer = byLayer.length - 1; layer >= 0; layer--) {
+            const verts = byLayer[layer];
+            if (!verts) continue;
+            orderLayerKeepingSiblingsTogether(verts).forEach((v, i) => { v.index = i; });
+        }
+    }
+}
+
+/**
+ * Order vertices in a layer so sibling groups (nodes that share a parent) stay contiguous,
+ * clusters follow parent left-to-right order, and members within a cluster follow `sequence`.
+ * @param {go.LayoutVertex[]} verts
+ * @returns {go.LayoutVertex[]}
+ */
+function orderLayerKeepingSiblingsTogether(verts) {
+    const rep = new Map();
+    const find = (v) => {
+        if (!rep.has(v)) rep.set(v, v);
+        let r = v;
+        while (rep.get(r) !== r) r = rep.get(r);
+        // path compression
+        let cur = v;
+        while (cur !== r) {
+            const next = rep.get(cur);
+            rep.set(cur, r);
+            cur = next;
+        }
+        return r;
+    };
+    const union = (a, b) => {
+        const ra = find(a);
+        const rb = find(b);
+        if (ra !== rb) rep.set(ra, rb);
+    };
+
+    for (const v of verts) find(v);
+
+    // Union nodes that share a common parent (caller).
+    const childrenByParent = new Map();
+    for (const v of verts) {
+        v.sourceVertexes.each((p) => {
+            let list = childrenByParent.get(p);
+            if (!list) {
+                list = [];
+                childrenByParent.set(p, list);
+            }
+            list.push(v);
+        });
+    }
+    for (const children of childrenByParent.values()) {
+        for (let i = 1; i < children.length; i++) {
+            union(children[0], children[i]);
+        }
+    }
+
+    const clusters = new Map();
+    for (const v of verts) {
+        const r = find(v);
+        let members = clusters.get(r);
+        if (!members) {
+            members = [];
+            clusters.set(r, members);
+        }
+        members.push(v);
+    }
+
+    for (const members of clusters.values()) {
+        members.sort(compareLayoutVertexSequence);
+    }
+
+    const clusterList = Array.from(clusters.values());
+    clusterList.sort((a, b) => {
+        const keyA = clusterParentOrderKey(a);
+        const keyB = clusterParentOrderKey(b);
+        if (keyA !== keyB) return keyA < keyB ? -1 : 1;
+        return compareLayoutVertexSequence(a[0], b[0]);
+    });
+
+    return clusterList.flat();
+}
+
+/** Barycenter of parent indices; falls back to the cluster's min sequence for roots. */
+function clusterParentOrderKey(members) {
+    let sum = 0;
+    let count = 0;
+    for (const v of members) {
+        v.sourceVertexes.each((p) => {
+            if (typeof p.index === 'number' && p.index >= 0) {
+                sum += p.index;
+                count++;
+            }
+        });
+    }
+    if (count > 0) return sum / count;
+    let minSeq = Infinity;
+    for (const v of members) {
+        const data = v.node?.data;
+        if (!data) continue;
+        const seq = sequenceValue(data);
+        if (seq < minSeq) minSeq = seq;
+    }
+    return Number.isFinite(minSeq) ? minSeq : 0;
+}
+
+function compareLayoutVertexSequence(a, b) {
+    const aData = a.node?.data;
+    const bData = b.node?.data;
+    if (!aData && !bData) return 0;
+    if (!aData) return 1;
+    if (!bData) return -1;
+    const aSeq = sequenceValue(aData);
+    const bSeq = sequenceValue(bData);
+    return aSeq === bSeq ? 0 : (aSeq < bSeq ? -1 : 1);
+}
+
+function sequenceValue(data) {
+    if (data.sequence != null) return data.sequence;
+    const parsed = Number.parseInt(data.key, 10);
+    return Number.isFinite(parsed) ? parsed : data.key;
+}
+
+function createDigraphLayout() {
+    return new OrderedLayeredDigraphLayout({ direction: 90, layerSpacing: 50, columnSpacing: 30 });
 }
 
 /**
@@ -36,6 +189,7 @@ export function setupDiagram(
     diagramDiv.className = "diagram";
     rootElem.appendChild(diagramDiv);
     let reversingLink = false;
+    let resequencing = false;
 
     if (options.licenseKey) {
         go.Diagram.licenseKey = options.licenseKey;
@@ -48,7 +202,7 @@ export function setupDiagram(
     const paddingHoriz = 75, paddingVert = 30;
     const diagram = new go.Diagram(diagramDiv, {
         allowCopy: false,
-        allowMove: false,
+        allowMove: !globalReadonly,
         allowSelect: true,
         allowDelete: !globalReadonly,
         allowInsert: !globalReadonly,
@@ -58,7 +212,7 @@ export function setupDiagram(
         defaultScale: 1.25,
         padding: new go.Margin(paddingVert, paddingHoriz, paddingVert, paddingHoriz),
         maxSelectionCount: 1,
-        layout: new go.LayeredDigraphLayout({ direction: 90, layerSpacing: 50, columnSpacing: 30 }),
+        layout: createDigraphLayout(),
         //'undoManager.isEnabled': true, // handled by Yjs
         'toolManager.hoverDelay': 200,
         'toolManager.toolTipDuration': 1e10,
@@ -92,6 +246,11 @@ export function setupDiagram(
         toolTip: createToolTip(rootElem),
         layerName: 'Unconnected',
         isLayoutPositioned: false,
+        // Avoid zero-width collapse if layout runs before TextBlock measure (blank names).
+        minSize: new go.Size(56, 28),
+        // NaN Y bounds lock vertical position to current Y (horizontal reorder only).
+        minLocation: new go.Point(-Infinity, NaN),
+        maxLocation: new go.Point(Infinity, NaN),
 
         selectionChanged: (part) => {
             part.layerName = getLayerName(part);
@@ -144,6 +303,7 @@ export function setupDiagram(
         ),
     )
     .bind('isLayoutPositioned', 'layerName', (ln) => ln !== 'Unconnected')
+    .bind('movable', 'readOnly', (ro) => !globalReadonly && !ro)
     .theme('shadowColor', 'shadow')
     .bind('deletable', 'readOnly', (ro) => !ro); // if any property is readOnly, the node is not deletable
     if (SHOW_COLLAPSE_BUTTON) {
@@ -240,7 +400,7 @@ export function setupDiagram(
         isShadowed: true,
         shadowOffset: new go.Point(0, 2),
         layerName: 'Groups',
-        layout: new go.LayeredDigraphLayout({ direction: 90, layerSpacing: 50, columnSpacing: 30 }),
+        layout: createDigraphLayout(),
     }).add(
         new go.TextBlock({
             alignment: go.Spot.TopLeft,
@@ -337,6 +497,11 @@ export function setupDiagram(
     });
     model.addFuncAddListener((key, data, local) => {
         if (!('name' in data) || isBlankFunctionName(data.name)) { data.name = 'function'; }
+        if (data.sequence == null) {
+            const parsed = Number.parseInt(key, 10);
+            data.sequence = Number.isFinite(parsed) ? parsed : Date.now();
+            if (local) { model.updateFunc(key, 'sequence', data.sequence); }
+        }
         // PlanConfig owns per-function readOnly; ignore any value from the collaborative model.
         const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name) };
         diagram.model.addNodeData(nodeData);
@@ -386,8 +551,18 @@ export function setupDiagram(
                 newValue = newValue?.toString()?.trim();
                 maybeRemoveGroup(node);
                 setGroup(node, newValue);
+            } else if (property === 'sequence') {
+                diagram.model.setDataProperty(node.data, property, newValue);
+                if (!resequencing) { scheduleRelayoutDigraph(diagram); }
+                return;
             }
-            if (changed) { updateUnconnectedNodesLayout(diagram); }
+            if (changed) {
+                updateUnconnectedNodesLayout(diagram);
+                // Name width changes need a digraph relayout for connected nodes.
+                if (property === 'name' && node.isLayoutPositioned) {
+                    scheduleRelayoutDigraph(diagram);
+                }
+            }
             else { diagram.model.setDataProperty(node.data, property, newValue); }
         }
     });
@@ -423,6 +598,41 @@ export function setupDiagram(
         if (changed) { updateUnconnectedNodesLayout(diagram); }
     });
     diagram.addDiagramListener('LayoutCompleted', () => { updateUnconnectedNodesLayout(diagram); });
+    diagram.addDiagramListener('SelectionMoved', () => {
+        if (globalReadonly || resequencing) { return; }
+        const node = diagram.selection.first();
+        if (!(node instanceof go.Node) || node.data?.isGroup || node.data?.readOnly) { return; }
+        if (node.layerName === 'Unconnected') { return; }
+
+        const siblings = findSiblingNodes(node);
+        if (siblings.length < 2) {
+            relayoutDigraph(diagram);
+            return;
+        }
+
+        const ordered = [...siblings].sort((a, b) => a.location.x - b.location.x);
+        const seqValues = siblings
+            .map(n => {
+                if (n.data.sequence != null) return n.data.sequence;
+                const parsed = Number.parseInt(n.data.key, 10);
+                return Number.isFinite(parsed) ? parsed : 0;
+            })
+            .sort((a, b) => a - b);
+
+        resequencing = true;
+        try {
+            ordered.forEach((n, i) => {
+                const seq = seqValues[i];
+                if (n.data.sequence !== seq) {
+                    diagram.model.setDataProperty(n.data, 'sequence', seq);
+                    model.updateFunc(n.data.key, 'sequence', seq);
+                }
+            });
+        } finally {
+            resequencing = false;
+        }
+        relayoutDigraph(diagram);
+    });
 
     return diagram;
 }
@@ -564,6 +774,52 @@ function nodeIsBecomingConnected(node) {
     node.alignment = go.Spot.Default;
     node.scale = 1.0;
     node.isLayoutPositioned = true;
+    // Force name TextBlock measure before the upcoming digraph layout (blank → "function").
+    node.updateTargetBindings();
+    node.ensureBounds();
+}
+
+/** Ensure node sizes are measured, then run digraph layout. */
+function relayoutDigraph(diagram) {
+    if (!diagram?.div) return;
+    diagram.nodes.each((n) => {
+        if (n instanceof go.Node && n.isLayoutPositioned && !n.data?.isGroup) {
+            n.ensureBounds();
+        }
+    });
+    diagram.layoutDiagram(true);
+}
+
+/**
+ * Relayout on the next frame so remote Yjs updates can finish TextBlock binding/measure first.
+ * @param {go.Diagram} diagram
+ */
+function scheduleRelayoutDigraph(diagram) {
+    requestAnimationFrame(() => relayoutDigraph(diagram));
+}
+
+/**
+ * Nodes that share at least one caller with `node`, or (for roots) other roots.
+ * @param {go.Node} node
+ * @returns {go.Node[]}
+ */
+function findSiblingNodes(node) {
+    const siblings = new Set([node]);
+    const callers = [];
+    node.findNodesInto().each(n => callers.push(n));
+    if (callers.length === 0) {
+        node.diagram.nodes.each(n => {
+            if (n.data?.isGroup || n.layerName === 'Unconnected') return;
+            if (n.findNodesInto().count === 0) { siblings.add(n); }
+        });
+        return [...siblings];
+    }
+    for (const caller of callers) {
+        caller.findNodesOutOf().each(n => {
+            if (!n.data?.isGroup && n.layerName !== 'Unconnected') { siblings.add(n); }
+        });
+    }
+    return [...siblings];
 }
 
 function isCallsIntoRO(ro) {

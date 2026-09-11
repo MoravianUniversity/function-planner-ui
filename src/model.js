@@ -572,7 +572,8 @@ export class Model {
     //    io (fixed string)
     //    testable (boolean)
     //    owner (string)
-    // showCode / showTestCode / readOnly are PlanConfig (not stored on functions)
+    //    sequence (number) — left-to-right order among siblings in the digraph layout
+    // Show/readOnly policies live in PlanConfig options (not on functions).
     updateFunc(key, property, value, cursorPos=null) {
         const func = this.functions.get(key);
         if (!func) { console.error(`Function with key ${key} does not exist`); return; }
