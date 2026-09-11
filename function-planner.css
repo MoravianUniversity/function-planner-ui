@@ -372,12 +372,12 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     h2 { font-size: 1.4em; margin: 0; border-bottom: 2px solid var(--text-color); margin: 0; }
     h3 { font-size: 1.1em; margin-bottom: 0; }
     
-    input.func-name { font-family: inherit; font-size: 1em; border: 1px solid transparent; font-weight: bold; }
+    input.func-name { font-family: inherit; font-size: 1em; border: 1px solid transparent; font-weight: bold; field-sizing: content; width: auto; max-width: calc(100% - 1em); text-overflow: ellipsis; }
     h2:has(input.func-name)::before, h2:has(input.func-name)::after { font-size: 1em; }
     /* h2:has(input.func-name)::before { content: 'def '; color:#C586C0; } */
     h2:has(input.func-name)::after { content: '()'; color:#bbbbbb; }
     h2:has(input.func-name) {
-        field-sizing: content; /* needs a JS work-around in Firefox and other browsers since it is not supported */
+        field-sizing: content;
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-weight: normal;
         text-wrap: nowrap;
@@ -389,11 +389,11 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     /*:invalid, :user-invalid { background-color: rgb(from var(--error-color) r g b / 0.2) !important; border: 1px solid var(--error-color) !important; }*/
     input, textarea, select { border: 1px solid var(--insp-var-input-border-color); background-color: var(--tool-background-color); color: var(--text-color); }
     label input + p, label select + p { font-size: 0.8em; margin-top: 0; }
-    textarea { field-sizing: content; }
+    textarea { field-sizing: content; text-overflow: ellipsis; }
     input::placeholder, textarea::placeholder, select:has(option[value=""]:checked) { color: var(--placeholder-color); opacity: 1; font-style: italic; }
     input.warning, textarea.warning, select.warning { background-color: rgb(from var(--warning-color) r g b / 0.2); border: 1px solid var(--warning-color) !important; accent-color: var(--warning-color); }
     input.error, textarea.error, select.error { background-color: rgb(from var(--error-color) r g b / 0.2); border: 1px solid var(--error-color) !important; accent-color: var(--error-color); }
-    select.func-io, select.func-owner { field-sizing: content; }
+    select.func-io, select.func-owner { field-sizing: content; text-overflow: ellipsis; }
     .func-code-box textarea { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.9em; white-space: pre; tab-size: 4; }
     .func-code-box textarea::placeholder { color: #aaa; }
     .func-code-box label {
@@ -464,7 +464,7 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
         border-radius: 0.5em;
         background-color: var(--insp-vars-background-color);
         h3 { font-size: 1.1em; margin: 0; display: inline-block; padding-right: 0.75em; }
-        input, select { margin: 0.1em 0; max-width: 100%; field-sizing: content; }
+        input, select { margin: 0.1em 0; max-width: 100%; field-sizing: content; text-overflow: ellipsis; }
         .sortable-ghost { background-color: var(--insp-var-ghost-color); opacity: 0.8; }
         .sortable-drag { background-color: var(--insp-var-ghost-color); opacity: 0.6; }
         
