@@ -1,4 +1,4 @@
-import{i as r}from"./function-planner-Bf2hzMvL.js";import"./ui-yMus3xAk.js";import"./yjs-DLZ4IDYl.js";const i={functions:[{key:1,name:"main",io:"none",code:`# Read the corpus of words from the file
+import{i as r}from"./function-planner-BjiJ4D_G.js";import"./ui-yMus3xAk.js";import"./yjs-DLZ4IDYl.js";const i={functions:[{key:1,name:"main",io:"none",code:`# Read the corpus of words from the file
 words = read_words("tom-swift.txt")
 
 print("===== New Story using Bigrams =====")
@@ -15,4 +15,4 @@ trigrams = build_trigrams(words)
 trigram_story = generate_words_from_trigrams(trigrams, 100)
 if len(trigram_story) != 100:
     print("ERROR: Trigam story is not 100 words long")
-print(' '.join(trigram_story))`,showCode:!0,readOnly:["name","desc","params","returns","io","testable","code"]}],calls:[]};window.addEventListener("DOMContentLoaded",()=>{r("planner","bigrams",{initialModel:i,minFunctions:6,minTestable:4,adminMode:!1})});
+print(' '.join(trigram_story))`}],calls:[]};window.addEventListener("DOMContentLoaded",()=>{r("planner","bigrams",{initialModel:i,minFunctions:6,minTestable:4,adminMode:!1,showCodeFor:"^main$",functionReadOnly:[{for:"^main$",fields:["name","desc","params","returns","io","testable","code"]}]})});
