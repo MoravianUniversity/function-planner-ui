@@ -45,6 +45,7 @@ export function setupDiagram(
         if (options.adminMode) { return false; }
         return resolveFunctionReadOnly(name?.toString() ?? '', options.functionReadOnly);
     }
+    const paddingHoriz = 75, paddingVert = 30;
     const diagram = new go.Diagram(diagramDiv, {
         allowCopy: false,
         allowMove: false,
@@ -352,8 +353,8 @@ export function setupDiagram(
         // Only the client that added the function should select/open it.
         if (model.synced && local) {
             diagram.select(diagram.findNodeForKey(key));
-            updateUnconnectedNodesLayout(diagram);
         }
+        updateUnconnectedNodesLayout(diagram);
     });
     model.addFuncRemoveListener((key) => {
         const node = diagram.findNodeForKey(key);
@@ -380,15 +381,14 @@ export function setupDiagram(
                 if (newValue === '') { newValue = 'function'; }
                 diagram.model.setDataProperty(node.data, property, newValue);
                 diagram.model.setDataProperty(node.data, 'readOnly', effectiveNodeReadOnly(newValue));
-                // TODO: return; //?
                 changed = true;
             } else if (property === 'owner' && options.canClaimFuncs) {
                 newValue = newValue?.toString()?.trim();
                 maybeRemoveGroup(node);
                 setGroup(node, newValue);
             }
-            diagram.model.setDataProperty(node.data, property, newValue);
             if (changed) { updateUnconnectedNodesLayout(diagram); }
+            else { diagram.model.setDataProperty(node.data, property, newValue); }
         }
     });
     model.addFuncListener('problems', (key, _, newValue) => {
