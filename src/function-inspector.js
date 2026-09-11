@@ -196,9 +196,12 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
     const h3 = document.createElement("h3");
     h3.textContent = name+"(s)";
     const list = document.createElement("div");
-    div.append(h3, list);
-    const initAdd = makeAddButton();
-    div.appendChild(initAdd);
+    list.className = "func-vars-list";
+    const appendBtn = document.createElement("button");
+    appendBtn.type = "button";
+    appendBtn.className = "func-vars-add";
+    appendBtn.textContent = `Add ${name}`;
+    div.append(h3, list, appendBtn);
 
     function setProp(index, subprop, value, cursorPos=null) { funcs.set(`${property}[${index}].${subprop}`, value, cursorPos); }
     function getIndex(e) { return Array.prototype.indexOf.call(list.children, e.target.closest(".func-var")); }
@@ -232,12 +235,19 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
         if (edit) {
             const result = await showTypeBuilder(options, edit.parentElement.querySelector(".func-var-type").value);
             if (result !== null) { setProp(getIndex(e), "type", result); }
-        } else {
-            const target = e.target.closest(".func-button");
-            if (!target) { return; }
-            if (target.classList.contains("func-button-add")) { funcs.add(property, target === initAdd ? -1 : getIndex(e)); }
-            else if (target.classList.contains("func-button-remove")) { funcs.remove(property, getIndex(e)); }
+            return;
         }
+        if (e.target.closest(".func-vars-add")) {
+            funcs.add(property, -1);
+            return;
+        }
+        const insert = e.target.closest(".func-var-insert");
+        if (insert) {
+            funcs.add(property, getIndex(e));
+            return;
+        }
+        const remove = e.target.closest(".func-button-remove");
+        if (remove) { funcs.remove(property, getIndex(e)); }
     });
 
     Sortable.create(list, {
@@ -264,7 +274,7 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
         const name = hasName ? box.querySelector(".func-var-name") : null;
         const type = box.querySelector(".func-var-type");
         const desc = box.querySelector(".func-var-desc");
-        const add = box.querySelector(".func-button-add");
+        const insert = box.querySelector(".func-var-insert");
         const remove = box.querySelector(".func-button-remove");
         const drag = box.querySelector(".func-var-drag-handle");
 
@@ -276,7 +286,7 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
 
         const itemRO = itemIsRO(ro, i, nameValue);
         box.classList.toggle("func-var-readonly", itemRO);
-        add.classList.toggle("func-button-disabled", itemRO);
+        insert.classList.toggle("func-button-disabled", itemRO);
         remove.classList.toggle("func-button-disabled", itemRO);
         drag.classList.toggle("func-var-drag-disabled", itemRO);
     }
@@ -319,7 +329,7 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
             const ro = funcs.effectiveReadOnly();
             const masterRO = isReadOnly(ro, property);
             div.classList.toggle("func-vars-readonly", masterRO);
-            initAdd.classList.toggle("func-button-disabled", masterRO);
+            appendBtn.classList.toggle("func-button-disabled", masterRO);
             for (let i = 0; i < list.children.length; i++) {
                 updateItemRO(list.children[i], i, ro);
             }
@@ -353,8 +363,8 @@ function makeVarBox(model, options, hasName) {
     const box = document.createElement("div");
     box.className = "func-var";
     box.append(
+        makeInsertButton(),
         makeDragHandle(),
-        makeAddButton(),
         makeRemoveButton()
     );
     if (hasName) {
@@ -368,6 +378,12 @@ function makeVarBox(model, options, hasName) {
         makeDescElement()
     );
     return box;
+}
+function makeInsertButton() {
+    const insert = makeAddButton();
+    insert.classList.add("func-var-insert");
+    insert.title = "Insert here";
+    return insert;
 }
 
 ////////// Type editor functions //////////

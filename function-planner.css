@@ -453,13 +453,11 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     }
     .func-var-type { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;; }
     .func-var-desc { width: 100%; display: inline-block; }
-    .func-vars >div:not(.func-button):not(:has(.func-var))::after { content: "None"; display: block; height: 0em; }
     .func-vars {
         position: relative;
         width: calc(100% - 1em);
         margin: 1.5em 0 0 0;
         padding: 0.5em;
-        padding-bottom: 1.75em;
         border: 1px solid var(--stroke-color);
         border-radius: 0.5em;
         background-color: var(--insp-vars-background-color);
@@ -485,7 +483,27 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
         .func-var-type:has(option[value*=" "]:checked):not(:disabled) + .func-var-type-edit,
         .func-var-type:has(option[data-custom-type]:checked):not(:disabled) + .func-var-type-edit { display: inline-block; }
 
-        /* Add and Remove Buttons */
+        .func-vars-list { min-height: 0; }
+
+        .func-vars-add {
+            display: block;
+            width: 100%;
+            margin: 0.35em 0 0 0;
+            padding: 0.4em 0.75em;
+            box-sizing: border-box;
+            cursor: pointer;
+            border: 1px solid var(--stroke-color);
+            border-radius: 0.4em;
+            background-color: var(--insp-vars-background-color);
+            color: var(--text-color);
+            font: inherit;
+            font-weight: 600;
+            text-align: center;
+        }
+        .func-vars-add:hover { background-color: var(--insp-var-background-color); }
+        .func-vars-add.func-button-disabled { display: none; }
+
+        /* Remove + insert buttons on var cards */
         .func-button {
             position: absolute; top: -0.625em;
             border: 1px solid var(--stroke-color);
@@ -493,10 +511,37 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
             background-color: var(--insp-vars-background-color);
         }
         .func-button-remove { right: 0.75em; }
-        .func-button-add { right: 2.5em; }
-        > .func-button-add { top: unset; bottom: 0.75em; right: 3em !important; }
-        /* > .func-button-add:last-child { position: static; } */
-        .sortable-drag .func-button { display: none; }
+        .func-var-insert {
+            left: 0;
+            right: 0;
+            top: -1.2em;
+            width: auto;
+            height: 1.5em;
+            z-index: 115;
+            transform: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            background: transparent;
+            border-radius: 0;
+            opacity: 0;
+        }
+        .func-var-insert svg {
+            box-sizing: content-box;
+            width: 0.75em;
+            height: 0.75em;
+            margin: 0;
+            padding: 0.2em;
+            border: 1px solid var(--stroke-color);
+            border-radius: 50%;
+            background-color: var(--insp-vars-background-color);
+        }
+        .func-var-insert:hover {
+            opacity: 1;
+        }
+        .sortable-drag .func-button,
+        .sortable-ghost .func-var-insert { display: none; }
 
         /* Drag Handle */
         .func-var:not(.func-var-readonly) .func-var-drag-handle {
@@ -508,7 +553,8 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
         }
         .func-var:not(.func-var-readonly):hover .func-var-drag-handle { background: url("images/drag-dots.svg") center/0.8em no-repeat; }
     }
-    .func-vars.func-vars-readonly { padding-bottom: 0em; min-height: 3em; }
+    .func-vars.func-vars-readonly { min-height: 3em; }
+    .func-vars.func-vars-readonly .func-var-insert { display: none; }
 
     label { display: block; }
     label:first-of-type { margin-top: 1em; }
