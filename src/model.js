@@ -28,17 +28,8 @@ import diff from 'fast-diff';
 
 const MODEL_DATA_TEXTS = ['documentation', 'testDocumentation', 'globalCode', 'testGlobalCode'];
 const MODEL_DATA_ARRAYS = ['authors']; // NOTE: this assumes array of strings, not array of anything like in functions
-/** Former modelData policy flags — now PlanConfig only; ignored on import/export. */
-const LEGACY_MODEL_DATA_KEYS = [
-    'showTestDocumentation',
-    'showGlobalCode',
-    'showTestGlobalCode',
-    'readOnly',
-];
 const FUNC_DATA_TEXTS = ['name', 'desc', 'code', 'testCode'];
 const FUNC_DATA_ARRAYS = ['params', 'returns'];
-/** Former per-function policy flags — now PlanConfig only; ignored on import/export. */
-const LEGACY_FUNC_KEYS = ['readOnly', 'showCode', 'showTestCode'];
 
 export class Model {
     #suppressObservers = false;
@@ -134,13 +125,11 @@ export class Model {
      */
     exportModel() {
         const modelData = { ...this.modelData.toJSON() };
-        for (const key of LEGACY_MODEL_DATA_KEYS) { delete modelData[key]; }
         return {
             ...modelData,
             functions: Array.from(this.functions.entries()).map(([key, ymap]) => {
                 const func = ymap.toJSON();
                 func.key = key;
-                for (const legacy of LEGACY_FUNC_KEYS) { delete func[legacy]; }
                 return func;
             }),
             calls: Array.from(this.calls.keys()).map(callKey => callKey.split('-')).map(
@@ -161,9 +150,9 @@ export class Model {
             this.functions.clear();
             this.calls.clear();
 
-            // import modelData (skip content keys handled below and legacy PlanConfig fields)
+            // import modelData (skip functions/calls handled below)
             for (const [prop, value] of Object.entries(data || {})) {
-                if (['functions', 'calls', ...LEGACY_MODEL_DATA_KEYS].includes(prop)) { continue; }
+                if (prop === 'functions' || prop === 'calls') { continue; }
                 this.updateModelData(prop, value);
             }
 
@@ -312,7 +301,6 @@ export class Model {
     //    testGlobalCode (Y.Text)
     // Show/readOnly policies live in PlanConfig options (not model data).
     updateModelData(property, value, cursorPos=null) {
-        if (LEGACY_MODEL_DATA_KEYS.includes(property)) { return; }
         if (MODEL_DATA_TEXTS.includes(property)) {
             updateText(this.modelData, property, value, cursorPos);
         } else if (MODEL_DATA_ARRAYS.includes(property)) {
@@ -513,7 +501,6 @@ export class Model {
         if (data instanceof Y.Map) { return data; }
         if (data instanceof Map) { data = Object.fromEntries(data); }
         return new Y.Map(Object.entries(data)
-            .filter(([prop]) => !LEGACY_FUNC_KEYS.includes(prop))
             .map(([prop, val]) => {
                 const yval = FUNC_DATA_TEXTS.includes(prop) ? new Y.Text(val) :
                         FUNC_DATA_ARRAYS.includes(prop) ? Y.Array.from(val.map(this.convertFuncData)) :
@@ -587,7 +574,6 @@ export class Model {
     //    owner (string)
     // showCode / showTestCode / readOnly are PlanConfig (not stored on functions)
     updateFunc(key, property, value, cursorPos=null) {
-        if (LEGACY_FUNC_KEYS.includes(property)) { return; }
         const func = this.functions.get(key);
         if (!func) { console.error(`Function with key ${key} does not exist`); return; }
         if (FUNC_DATA_ARRAYS.some(arr => property.startsWith(arr))) {

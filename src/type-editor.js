@@ -333,11 +333,6 @@ class TypeEditor {
         return false;
     }
 
-    // Private: Backward compatibility wrapper
-    #isInsideSet(element) {
-        return this.#needsImmutableTypes(element);
-    }
-
     #createTypeDropdown(parent, isRoot = false) {
         const container = document.createElement('span');
         container.className = 'type-container';
@@ -353,7 +348,7 @@ class TypeEditor {
         select.appendChild(placeholderOption);
 
         // Determine which types to show based on context
-        const inSetContext = this.#isInsideSet(parent);
+        const inSetContext = this.#needsImmutableTypes(parent);
         const immutableTypes = [...this.#baseTypes, 'tuple'];
         const typesToShow = inSetContext ? immutableTypes : this.#allTypes;
 
@@ -876,7 +871,7 @@ class TypeEditor {
         select.appendChild(placeholderOption);
         
         // Determine which types to show based on context
-        const inSetContext = this.#isInsideSet(parentElement);
+        const inSetContext = this.#needsImmutableTypes(parentElement);
         const immutableTypes = [...this.#baseTypes, 'tuple'];
         const typesToShow = inSetContext ? immutableTypes : this.#allTypes;
 

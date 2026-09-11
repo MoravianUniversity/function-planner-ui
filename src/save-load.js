@@ -10,7 +10,6 @@
  *  - reset(model, options, confirm=true)
  *  - saveJSON(model, options, includeProblems=false)
  *  - loadJSON(model, options)
- *  - importJSON(model, options)
  */
 
 import Swal from 'sweetalert2';
@@ -419,23 +418,6 @@ function confirmDialog(title, text, confirmFunc, theme='auto') {
     }).then((res) => { if (res.isConfirmed) { confirmFunc(); } });
 }
 
-function mergeModel(model, data) {
-    const maxKey = Array.from(model.functions).reduce((max, n) => Math.max(max, parseInt(n.key)), -1);
-    data.model.transact(() => {
-        data.functions.forEach(func => {
-            const key = (parseInt(func.key) + maxKey).toString();
-            func = { ...func };
-            delete func.key;
-            model.functions.set(key, model.convertFuncData(func));
-        });
-        data.calls.forEach(call => {
-            const from = (parseInt(call.from) + maxKey).toString();
-            const to = (parseInt(call.to) + maxKey).toString();
-            model.calls.set(`${from}-${to}`, true);
-        });
-    });
-}
-
 /**
  * Reset the model to the initial model.
  * @param {*} model
@@ -491,42 +473,15 @@ export function loadJSON(model, options={}) {
         },
     }).then((result) => {
         if (!result.isConfirmed) { return; }
-        loadJSONString(model, options, result.value, false);
-    });
-}
-/**
- * Import JSON data into the model, "merging" with the current model.
- * @param {*} model
- * @param {object} options 
- */
-export function importJSON(model, options={}) {
-    Swal.fire({
-        theme: options.theme,
-        title: "Import JSON",
-        html: "Select a JSON file to import.<br>This will <em>merge</em> the current plan.",
-        input: "textarea",
-        showCancelButton: true,
-        showCloseButton: true,
-        inputValidator: (value) => {
-            if (!value) { return "JSON data is required."; }
-            try {
-                const data = JSON.parse(value);
-                if (!data.functions || !data.calls) { return "Invalid JSON format. Expected 'functions' and 'calls' keys."; }
-            } catch (e) { return "Invalid JSON format"; }
-            return null;
-        },
-    }).then((result) => {
-        if (!result.isConfirmed) { return; }
-        loadJSONString(model, options, result.value, true);
+        loadJSONString(model, options, result.value);
     });
 }
 
-function loadJSONString(model, options={}, json, merge=false) {
+function loadJSONString(model, options={}, json) {
     try {
         const data = JSON.parse(json);
         if (!data.functions || !data.calls) { throw new Error("Invalid JSON format. Expected 'functions' and 'calls' keys at a minimum."); }
-        if (merge) { mergeModel(model, data); }
-        else { model.importModel(data); }
+        model.importModel(data);
     } catch (e) {
         console.error("Invalid JSON data:", e);
         Swal.fire({
