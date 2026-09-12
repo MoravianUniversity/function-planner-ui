@@ -25,6 +25,7 @@
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import diff from 'fast-diff';
+import { uniqueDisplayNameToId } from './authors.js';
 
 const MODEL_DATA_TEXTS = ['documentation', 'testDocumentation', 'globalCode', 'testGlobalCode'];
 const MODEL_DATA_ARRAYS = ['authors']; // NOTE: this assumes array of strings, not array of anything like in functions
@@ -230,6 +231,15 @@ export class Model {
             else if (property !== '') { this.#fireModelDataListeners(property); }
         }
     }
+
+    /**
+     * Re-notify listeners for a single modelData property without writing Yjs.
+     * Used when host-ephemeral author labels change but author ids do not.
+     * @param {string} property
+     */
+    notifyModelData(property) {
+        this.#fireModelDataListeners(property);
+    }
     #fireModelDataProblems() {
         this.#fireListeners(this.#modelDataListeners['problems'], 'problems', this.#modelDataProblems);
     }
@@ -247,26 +257,50 @@ export class Model {
     }
 
     /**
-     * Replace module authors with an external list (e.g. plan members).
-     * No-ops when the list is unchanged. Clears function owners that are no
-     * longer in the list.
-     * @param {string[]} names
+     * Replace module authors with an external list of stable ids (e.g. emails).
+     * Best-effort remaps owners that still use unique display names from
+     * `labels` (id → display name). Clears owners that cannot be remapped
+     * and are not in the new id list. No-ops when authors and owners are
+     * already consistent with `ids`.
+     * @param {string[]} ids
+     * @param {Record<string, string>} [labels={}]
      */
-    syncExternalAuthors(names) {
-        const next = (Array.isArray(names) ? names : [])
+    syncExternalAuthors(ids, labels={}) {
+        const next = (Array.isArray(ids) ? ids : [])
             .map((n) => String(n ?? '').trim())
             .filter((n) => n.length > 0);
         const current = (this.modelData.get('authors')?.toJSON() || [])
             .map((n) => String(n ?? '').trim());
-        if (current.length === next.length && current.every((n, i) => n === next[i])) {
+        const authorsChanged = !(current.length === next.length && current.every((n, i) => n === next[i]));
+        const allowed = new Set(next);
+        const displayToId = uniqueDisplayNameToId(labels);
+
+        /** @type {{ func: Y.Map, owner: string|null }[]} */
+        const ownerUpdates = [];
+        for (const [, func] of this.functions) {
+            const owner = func.get('owner')?.toString() || '';
+            if (!owner) { continue; }
+            if (allowed.has(owner)) { continue; }
+            const remapped = displayToId.get(owner);
+            if (remapped && allowed.has(remapped)) {
+                ownerUpdates.push({ func, owner: remapped });
+            } else {
+                ownerUpdates.push({ func, owner: null });
+            }
+        }
+
+        if (!authorsChanged && ownerUpdates.length === 0) {
             return;
         }
+
         this.model.transact(() => {
-            this.updateModelData('authors', next);
-            const allowed = new Set(next);
-            for (const [, func] of this.functions) {
-                const owner = func.get('owner')?.toString() || '';
-                if (owner && !allowed.has(owner)) {
+            if (authorsChanged) {
+                this.updateModelData('authors', next);
+            }
+            for (const { func, owner } of ownerUpdates) {
+                if (owner) {
+                    func.set('owner', owner);
+                } else {
                     func.delete('owner');
                 }
             }

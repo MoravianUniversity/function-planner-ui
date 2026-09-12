@@ -7,6 +7,7 @@ import Swal from 'sweetalert2';
 
 import { wrapWithLabel, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly } from './inspector.js';
 import { loadSVG, makeOption, makeAddButton, makeRemoveButton } from './utils.js';
+import { authorLabel } from './authors.js';
 import { toEnglishType } from './type-utils.js';
 
 import TypeEditor from './type-editor.js';
@@ -152,20 +153,26 @@ function makeOwnerSelect(model, options, funcs) {
     select.className = 'func-owner';
     select.appendChild(makeOption('', 'Shared/Not Applicable'))
 
-    function authorLabels() {
+    function authorIds() {
         return (model.modelData.get('authors')?.toJSON() || []).map((a) => String(a ?? '').trim()).filter(Boolean);
     }
 
     function rebuildOptions() {
-        const authors = authorLabels();
+        const authors = authorIds();
         const current = [...select.options].slice(1).map((o) => o.value);
-        if (current.length === authors.length && current.every((v, i) => v === authors[i])) {
+        const currentLabels = [...select.options].slice(1).map((o) => o.text);
+        const nextLabels = authors.map((id) => authorLabel(options, id));
+        if (
+            current.length === authors.length &&
+            current.every((v, i) => v === authors[i]) &&
+            currentLabels.every((t, i) => t === nextLabels[i])
+        ) {
             return;
         }
         const selected = select.value;
         select.options.length = 1;
-        for (const author of authors) {
-            select.options.add(makeOption(author));
+        for (const id of authors) {
+            select.options.add(makeOption(id, authorLabel(options, id)));
         }
         select.value = authors.includes(selected) ? selected : '';
     }

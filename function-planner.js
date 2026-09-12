@@ -59,7 +59,9 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
  * @param {boolean|string[]} [options.moduleReadOnly] Module field read-only policy (true=all, false=none, or field names)
  * @param {{ for: string, fields: true|string[] }[]} [options.functionReadOnly] Per-function read-only rules (regex + fields)
  * @param {string[]|null} [options.externalAuthors] When non-null (collaborative hosts),
- *   authors are locked to this list (typically plan members) instead of free-text entry.
+ *   authors are locked to this list of stable ids (typically member emails) instead of free-text entry.
+ * @param {Record<string, string>} [options.authorLabels] Map of stable author id → display name.
+ *   When an id has no entry, the id itself is shown (free-text / demo authors).
  * @param {import('yjs').Doc} [options.ydoc] External Y.Doc shared with a WebsocketProvider (server is source of truth)
  * @param {boolean} [options.useIndexedDB] Local IndexedDB persistence; defaults to false when ydoc is set, otherwise true
  * @param {boolean} [options.readonly] Global read-only mode (diagram + inspectors still visible)
@@ -84,6 +86,9 @@ export default function init(
     options.callGraphOnly = options.callGraphOnly ?? false;
     options.canClaimFuncs = options.canClaimFuncs ?? false;
     options.externalAuthors = options.externalAuthors ?? null;
+    options.authorLabels = options.authorLabels && typeof options.authorLabels === 'object'
+        ? { ...options.authorLabels }
+        : {};
     options.readonly = options.readonly ?? false;
     options.useIndexedDB = options.useIndexedDB ?? !options.ydoc;
     options.collaborative = Boolean(options.ydoc) || options.useIndexedDB === false;
@@ -144,14 +149,20 @@ export default function init(
         /**
          * Replace authors from an external source (plan members). Pass null to
          * stop treating authors as externally owned (local demos only).
-         * @param {string[]|null} names
+         * Labels are host-ephemeral (id → display name); only ids are persisted.
+         * @param {string[]|null} ids
+         * @param {Record<string, string>} [labels={}]
          */
-        setExternalAuthors(names) {
-            options.externalAuthors = names;
-            if (names == null) {
+        setExternalAuthors(ids, labels={}) {
+            options.externalAuthors = ids;
+            options.authorLabels = labels && typeof labels === 'object' ? { ...labels } : {};
+            if (ids == null) {
                 return;
             }
-            model.syncExternalAuthors(names);
+            model.syncExternalAuthors(ids, options.authorLabels);
+            // Refresh label-dependent UI when ids are unchanged but names changed.
+            model.notifyModelData('authors');
+            diagram.findTopLevelGroups().each((group) => { group.updateTargetBindings(); });
         },
         destroy() {
             try {

@@ -17,6 +17,7 @@ import Swal from 'sweetalert2';
 import pythonIcon from '../images/python.svg';
 import unitTestsIcon from '../images/unit-tests.svg';
 import saveIcon from '../images/save.svg';
+import { authorFilenameSuffix, authorLabel } from './authors.js';
 
 export const DEFAULT_PROGRAM_HEADER = "TODO: program header";
 const DRAG_OVER_CLASS = 'func-planner-drag-over';
@@ -214,16 +215,17 @@ function pythonDocstring(desc, options, params, returns) {
     docstring = docstring.trimEnd() + '\n    """\n';
     return docstring;
 }
-function authorString(authors) {
-    return (authors.length === 0) ? 'TODO' :
-         (authors.length === 1) ? authors[0] :
-         (authors.length === 2) ? authors[0] + ' and ' + authors[1] :
-         (authors.slice(0, -1).join(', ') + ', and ' + authors.slice(-1)[0])
+function authorString(authorIds, options={}) {
+    const labels = authorIds.map((id) => authorLabel(options, id));
+    return (labels.length === 0) ? 'TODO' :
+         (labels.length === 1) ? labels[0] :
+         (labels.length === 2) ? labels[0] + ' and ' + labels[1] :
+         (labels.slice(0, -1).join(', ') + ', and ' + labels.slice(-1)[0])
 }
 // if authors is null, use all authors and don't split it up
 // if authors is provided, only include those authors in the export (array or string)
 // if authors is contains an empty string, include the unspecified author functions as well
-function dealWithAuthors(model, authors) {
+function dealWithAuthors(model, authors, options={}) {
     const modelAuthors = model.modelData.get('authors')?.toJSON() || [];
 
     const includeAll = authors == null;
@@ -232,7 +234,7 @@ function dealWithAuthors(model, authors) {
     // ensures that authors is always an array of trimmed non-empty strings, even if the input is a single string or null/undefined
     authors = (Array.isArray(authors) ? authors : (typeof authors === 'string' ? [authors] : [])).map(name => name.trim()).filter(name => name.length > 0);
 
-    const by = includeUnspecified ? authorString(modelAuthors) : authorString(authors);
+    const by = includeUnspecified ? authorString(modelAuthors, options) : authorString(authors, options);
 
     const functions = Array.from(model.functions.entries()).filter(([key, func]) => {
         const owner = func.get('owner')?.toString() || '';
@@ -271,7 +273,7 @@ function sortFunctions(model, functions) {
 }
 function generatePythonTemplate(model, options, authors=null, withTypes=true) {
     const data = model.modelData.toJSON();
-    const { by, functions } = dealWithAuthors(model, authors);
+    const { by, functions } = dealWithAuthors(model, authors, options);
     let text = `"""\n${data.documentation || DEFAULT_PROGRAM_HEADER}\n\nBy: ${by}\n"""\n\n`;
     if (data.globalCode) { text += `${data.globalCode}\n\n`; }
     const funcs = sortFunctions(model, functions);
@@ -332,9 +334,9 @@ export function exportToPython(model, options, withTypes=true) {
         "Python template copied to clipboard.<br>Paste it into a Python file.",
     )
 }
-function generatePythonTests(model, authors=null) {
+function generatePythonTests(model, options={}, authors=null) {
     const data = model.modelData.toJSON();
-    const { by, functions } = dealWithAuthors(model, authors);
+    const { by, functions } = dealWithAuthors(model, authors, options);
     let text = `"""\n${data.testDocumentation || "Tests for the " + model.id + " module"}\n\nBy: ${by}\n"""\n\nimport pytest\n\nimport ` + model.id + `\n\n`;
     if (data.testGlobalCode) { text += `${data.testGlobalCode}\n\n`; }
 
@@ -357,7 +359,7 @@ function generatePythonTests(model, authors=null) {
  */
 export function exportPythonTests(model, options={}) {
     exportTemplate(
-        model, options, generatePythonTests,
+        model, options, (model, authors = null) => generatePythonTests(model, options, authors),
         "Python Unit Tests Copied", unitTestsIcon,
         "Python unit tests copied to clipboard.<br>Paste it into a Python file that ends with <code>_test.py</code>.",
         "_test",
@@ -386,7 +388,7 @@ function exportTemplate(
             title: title,
             html: `Change author: <select>
             <option value="">All Combined in one file</option><option value="">Shared/Not Specified</option>
-            ${authors.map(author => `<option value="${author}">${author}</option>`).join("")}
+            ${authors.map((id) => `<option value="${id}">${authorLabel(options, id)}</option>`).join("")}
             </select><br><br>${descWithLink}`,
             showCloseButton: true,
             willOpen: (popup) => {
@@ -397,7 +399,10 @@ function exportTemplate(
                     const text = generateFunc(model, select.selectedIndex === 0 ? null : selected);
                     copyToClipboard(text);
                     downloadLink.href = dataURL(text);
-                    downloadLink.download = `${model.id}${selected ? `_${selected}` : ""}.py`;
+                    const suffix = selected
+                        ? `_${authorFilenameSuffix(selected)}`
+                        : "";
+                    downloadLink.download = `${model.id}${suffix}${filenameSuffix}.py`;
                 });
             }
         });

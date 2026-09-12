@@ -6,6 +6,7 @@
 import { wrapWithLabel, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly } from './inspector.js';
 import { DEFAULT_PROGRAM_HEADER } from './save-load.js';
 import { makeAddButton, makeRemoveButton } from './utils.js';
+import { authorLabel } from './authors.js';
 
 /**
  * Creates the module inspector div.
@@ -142,19 +143,23 @@ function makeAuthorNames(model, options, funcs) {
 
     funcs.listen('authors', (value) => {
         const trimmed = (value && value.length > 0) ? value.map((v) => v.trim()) : [];
-        const names = authorsLocked
+        const ids = authorsLocked
             ? trimmed.filter((name) => name.length > 0)
             : (trimmed.length > 0 ? trimmed : ['']);
+        // Members: show display labels in read-only inputs; stored values remain stable ids.
+        const display = authorsFromMembers
+            ? ids.map((id) => authorLabel(options, id))
+            : ids;
         if (authorsFromMembers) {
             outer.style.display = '';
         } else if (authorsLocked) {
             // adminMode template: only show if seed JSON already has authors
-            outer.style.display = names.length > 0 ? '' : 'none';
+            outer.style.display = display.length > 0 ? '' : 'none';
         }
         const current = currentValues();
-        if (current.length !== names.length || current.some((name, index) => name !== names[index])) {
+        if (current.length !== display.length || current.some((name, index) => name !== display[index])) {
             const selected = list.querySelector('input:focus')?.value;
-            list.replaceChildren(...names.map(name => makeAuthorRow(name)));
+            list.replaceChildren(...display.map((name) => makeAuthorRow(name)));
             if (selected != null) { list.querySelector(`input[value="${selected}"]`)?.focus(); }
         }
     });

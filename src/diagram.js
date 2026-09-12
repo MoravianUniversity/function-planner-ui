@@ -7,6 +7,7 @@ import { pythonDefLine } from './save-load.js';
 import { updateAllProblems, updateInterNodeProblems, willFuncBecomeRecursive } from './problem-checker.js';
 import { ALLOW_RECURSIVE, SHOW_COLLAPSE_BUTTON } from './settings.js';
 import { resolveFunctionReadOnly } from './inspector.js';
+import { authorLabel } from './authors.js';
 
 const DEFAULTS = {
     'name': '',
@@ -412,7 +413,7 @@ export function setupDiagram(
             wrap: go.Wrap.Fit,
             textAlign: "right",
             shadowVisible: false,
-        }).bind("text", "key").theme('font', 'groupText').theme('stroke', 'text'),
+        }).bind("text", "key", (id) => authorLabel(options, id)).theme('font', 'groupText').theme('stroke', 'text'),
         new go.Panel("Auto", { alignment: go.Spot.TopLeft }).add(
             new go.Shape("RoundedRectangle", { parameter1: 6 }) // surrounds the Placeholder
                 .theme('stroke')
