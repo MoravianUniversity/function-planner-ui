@@ -541,14 +541,15 @@ export class Model {
      */
     removeFuncs(keys) {
         this.model.transact(() => {
-            // TODO: utilize calledFunctions and callingFunctions maps
-            this.calls.forEach((_, callKey) => {
-                const [from, to] = callKey.split('-');
-                if (keys.includes(from) || keys.includes(to)) {
-                    this.calls.delete(callKey);
+            for (const key of keys) {
+                for (const other of this.calledFunctions[key] || []) {
+                    this.calls.delete(`${key}-${other}`);
                 }
-            });
-            for (const key of keys) { this.functions.delete(key); }
+                for (const other of this.callingFunctions[key] || []) {
+                    this.calls.delete(`${other}-${key}`);
+                }
+                this.functions.delete(key);
+            }
         });
     }
 
