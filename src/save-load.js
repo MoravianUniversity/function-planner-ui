@@ -242,21 +242,29 @@ function dealWithAuthors(model, authors) {
     return { by, functions };
 }
 // Performs a topological sort of the functions based on calls to ensure that called functions are
-// defined before they are called. If there is a cycle, somewhat ignore it.
+// defined before they are called. Only edges between functions in `functions` are considered
+// (calls to/from excluded authors are ignored). If there is a cycle, order among that
+// strongly-connected component is best-effort.
 function sortFunctions(model, functions) {
+    const included = new Set(functions.map(([key]) => key));
     const sortedKeys = [];
     const visited = new Set();
 
     function visit(key) {
-        if (visited.has(key)) { return; }
+        if (visited.has(key) || !included.has(key)) { return; }
         visited.add(key);
-        for (const calledKey of (model.calledFunctions[key] || [])) { visit(calledKey); }
+        for (const calledKey of (model.calledFunctions[key] || [])) {
+            if (included.has(calledKey)) { visit(calledKey); }
+        }
         sortedKeys.push(key);
     }
 
     for (const [key] of functions) {
-        if (!model.callingFunctions[key]) { visit(key); }
+        const callersInSet = (model.callingFunctions[key] || []).some((k) => included.has(k));
+        if (!callersInSet) { visit(key); }
     }
+    // Cycles (or anything not reached from a subgraph root) still need an order.
+    for (const [key] of functions) { visit(key); }
 
     const funcMap = Object.fromEntries(functions);
     return sortedKeys.map(key => [key, funcMap[key]]).filter(([key, func]) => func);
@@ -266,7 +274,7 @@ function generatePythonTemplate(model, options, authors=null, withTypes=true) {
     const { by, functions } = dealWithAuthors(model, authors);
     let text = `"""\n${data.documentation || DEFAULT_PROGRAM_HEADER}\n\nBy: ${by}\n"""\n\n`;
     if (data.globalCode) { text += `${data.globalCode}\n\n`; }
-    const funcs = authors == null ? sortFunctions(model, functions) : functions; // TODO: if authors is specified, we should still sort the functions, but only based on the calls between the included functions (ignore calls to excluded functions) - currently we just don't sort at all if authors is specified, which can lead to called functions being defined after their calls
+    const funcs = sortFunctions(model, functions);
     let hasMainFunc = false;
 
     for (const [key, func] of funcs) {
