@@ -3,7 +3,6 @@
  *
  * Future ideas:
  *  - some initial model settings propagate into in-progress model without resetting? (i.e. new functions, into read-only functions, etc)
- *  - a few less parentheses in the type editor string generation (and can dicts nest?)
  */
 
 import go from 'gojs';

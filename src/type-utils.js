@@ -97,19 +97,44 @@ function parsePythonType(src) {
     return parsed;
 }
 
+/**
+ * True when embedding this node under "of" / "keys of" / "values of" needs
+ * parentheses: top-level "and"/"or" joiners would otherwise be ambiguous.
+ */
 function needsParensInEnglish(ast) {
-    return ['list', 'tuple', 'set', 'dict'].includes(ast?.type);
+    if (!ast) { return false; }
+    if (ast.type === 'union') { return true; }
+    if ((ast.type === 'list' || ast.type === 'tuple') && ast.mode === 'with') { return true; }
+    return false;
+}
+
+/**
+ * True when this node is a joined "with"/"or" sibling and would absorb a
+ * trailing "and"/"or" (e.g. "tuple with list of int and str").
+ */
+function needsParensInJoin(ast) {
+    if (!ast) { return false; }
+    if (ast.type === 'union' || ast.type === 'dict' || ast.type === 'set') { return true; }
+    if (ast.type === 'list' || ast.type === 'tuple') { return true; }
+    return false;
+}
+
+function englishWithJoinParens(ast) {
+    const text = astToEnglish(ast);
+    return needsParensInJoin(ast) ? `(${text})` : text;
 }
 
 function astToEnglish(ast) {
     if (!ast || !ast.type) { return '?'; }
     if (ast.type === 'custom') { return ast.customValue || '?'; }
-    if (ast.type === 'union') { return joinEnglish(ast.types.map(astToEnglish), 'or'); }
+    if (ast.type === 'union') {
+        return joinEnglish((ast.types || []).map(englishWithJoinParens), 'or');
+    }
     if (BASE_TYPES.has(ast.type)) { return ast.type; }
 
     if (ast.type === 'list') {
         if (ast.mode === 'with') {
-            return `list with ${joinEnglish((ast.types || []).map(astToEnglish))}`;
+            return `list with ${joinEnglish((ast.types || []).map(englishWithJoinParens))}`;
         }
         const nested = astToEnglish(ast.nested);
         return `list of ${needsParensInEnglish(ast.nested) ? `(${nested})` : nested}`;
@@ -123,7 +148,7 @@ function astToEnglish(ast) {
             const nested = astToEnglish(ast.nested);
             return `tuple of ${needsParensInEnglish(ast.nested) ? `(${nested})` : nested}`;
         }
-        return `tuple with ${joinEnglish((ast.types || []).map(astToEnglish))}`;
+        return `tuple with ${joinEnglish((ast.types || []).map(englishWithJoinParens))}`;
     }
     if (ast.type === 'dict') {
         const key = astToEnglish(ast.keyType);
