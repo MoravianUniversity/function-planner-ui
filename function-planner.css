@@ -510,7 +510,7 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
             border-radius: 50%;
             background-color: var(--insp-vars-background-color);
         }
-        .func-button-remove { right: 0.75em; }
+        .func-button-remove { right: 0.75em; z-index: 116; }
         .func-var-insert {
             left: 0;
             right: 0;

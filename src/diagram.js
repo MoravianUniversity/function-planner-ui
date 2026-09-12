@@ -538,6 +538,15 @@ export function setupDiagram(
                 // Ignore collaborative model readOnly; policy is PlanConfig.functionReadOnly.
                 return;
             }
+            // Nested params/returns edits fire as "params[0].name" etc. Refresh the whole
+            // array on the GoJS node — setDataProperty cannot update nested paths.
+            const nestedArray = /^(params|returns)(\[|$)/.exec(property);
+            if (nestedArray) {
+                const field = nestedArray[1];
+                const arr = model.functions.get(key)?.get(field)?.toJSON() ?? [];
+                diagram.model.setDataProperty(node.data, field, arr);
+                return;
+            }
             let changed = false;
             newValue = newValue ?? DEFAULTS[property]; // ensure no undefined/null values
             if (property === 'name') {

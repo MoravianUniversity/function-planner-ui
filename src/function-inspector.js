@@ -241,13 +241,15 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
             funcs.add(property, -1);
             return;
         }
+        const remove = e.target.closest(".func-button-remove");
+        if (remove) {
+            funcs.remove(property, getIndex(e));
+            return;
+        }
         const insert = e.target.closest(".func-var-insert");
         if (insert) {
             funcs.add(property, getIndex(e));
-            return;
         }
-        const remove = e.target.closest(".func-button-remove");
-        if (remove) { funcs.remove(property, getIndex(e)); }
     });
 
     Sortable.create(list, {
