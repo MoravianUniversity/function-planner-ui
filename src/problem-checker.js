@@ -201,11 +201,19 @@ function cyclesToMap(cycles) {
  * @param {*} model 
  * @param {string} fromKey the source of a new link
  * @param {string} toKey the destination of a new link
+ * @param {{from: string, to: string}|null} [exceptEdge=null] edge to exclude
+ *   (e.g. the link being reversed) before testing the new edge
  * @returns {boolean} True if the function will become part of a cycle by adding the link.
  */
-export function willFuncBecomeRecursive(model, fromKey, toKey) {
+export function willFuncBecomeRecursive(model, fromKey, toKey, exceptEdge=null) {
     if (fromKey === toKey) { return true; }
     const callGraph = dup(model.calledFunctions);
+    if (exceptEdge) {
+        const outs = callGraph[exceptEdge.from];
+        if (outs) {
+            callGraph[exceptEdge.from] = outs.filter((k) => k !== exceptEdge.to);
+        }
+    }
     if (!callGraph[fromKey]) { callGraph[fromKey] = []; }
     callGraph[fromKey].push(toKey);
     const visited = new Set();

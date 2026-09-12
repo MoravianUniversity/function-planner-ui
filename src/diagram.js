@@ -348,7 +348,10 @@ export function setupDiagram(
             if (isCallsIntoRO(from.data.readOnly) || isCallsOutOfRO(to.data.readOnly) ||
                 isCallsIntoRO(to.data.readOnly) || isCallsOutOfRO(from.data.readOnly)) { return false; }
             if (model.calls.has(`${to.data.key}-${from.data.key}`)) { return false; }
-            // TODO: check recursive?
+            if (!ALLOW_RECURSIVE && willFuncBecomeRecursive(
+                model, to.data.key, from.data.key,
+                { from: from.data.key, to: to.data.key }
+            )) { return false; }
             reversingLink = true;
             model.updateFuncCall(from.data.key, to.data.key, to.data.key, from.data.key);
             reversingLink = false;
