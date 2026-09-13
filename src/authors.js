@@ -35,6 +35,7 @@ export function uniqueDisplayNameToId(labels) {
 /**
  * Filesystem-safe filename fragment from an author id or label.
  * If the value looks like an email, uses only the local-part (before @).
+ * Hyphens and other non-word characters become '_'.
  * @param {string} idOrLabel
  * @returns {string}
  */
@@ -45,6 +46,7 @@ export function authorFilenameSuffix(idOrLabel) {
     if (at > 0 && at < s.length - 1 && !s.includes(' ')) {
         s = s.slice(0, at);
     }
-    s = s.replace(/[^\w.\-]+/g, '_').replace(/^_+|_+$/g, '');
+    // Replace non-word chars (including '-') with '_'; dots are kept.
+    s = s.replace(/[^\w.]+/g, '_').replace(/^_+|_+$/g, '');
     return s || 'author';
 }

@@ -38,10 +38,15 @@ function copyToClipboard(text) {
 function downloadDataAsFile(filename, text, mime='text/plain') {
     const link = document.createElement('a');
     link.href = 'data:' + mime + ';charset=utf-8,' + encodeURIComponent(text);
-    link.download = filename;
+    link.download = toDownloadFilename(filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+/** Download names use '_' instead of '-' (e.g. plan ids like cell-phone-family-plan). */
+function toDownloadFilename(name) {
+    return String(name ?? '').replace(/-/g, '_');
 }
 
 function wrapText(text, {width=80, indent=4, firstLineIndent=indent}={}) {
@@ -376,7 +381,7 @@ function exportTemplate(
 ) {
     const text = generateFunc(model, null);
     copyToClipboard(text);
-    const link = `<a class="download-link" href="${dataURL(text)}" download="${model.id}${filenameSuffix}.py">Click here to download it.</a>`;
+    const link = `<a class="download-link" href="${dataURL(text)}" download="${toDownloadFilename(`${model.id}${filenameSuffix}.py`)}">Click here to download it.</a>`;
     const descWithLink = `${desc}<br>${link}`;
 
     if (options.canClaimFuncs) {
@@ -402,7 +407,7 @@ function exportTemplate(
                     const suffix = selected
                         ? `_${authorFilenameSuffix(selected)}`
                         : "";
-                    downloadLink.download = `${model.id}${suffix}${filenameSuffix}.py`;
+                    downloadLink.download = toDownloadFilename(`${model.id}${suffix}${filenameSuffix}.py`);
                 });
             }
         });
@@ -459,7 +464,7 @@ export function saveJSON(model, options={}) {
         imageWidth: "6em",
         title: "JSON Copied",
         html: "JSON version copied to clipboard.<br>Save to a file so it can be reloaded later.<br>" +
-            `<a href="${dataURL(json, 'application/json')}" download="${model.id}-plan.json">Click here to download it.</a>`,
+            `<a href="${dataURL(json, 'application/json')}" download="${toDownloadFilename(`${model.id}-plan.json`)}">Click here to download it.</a>`,
         showCloseButton: true,
     });
 }
