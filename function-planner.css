@@ -163,7 +163,7 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
             drop-shadow(1px 1px 0px var(--button-text-color))
             drop-shadow(var(--button-icon-shadow));
     }
-    button .func-planner-icon svg {
+    button .func-planner-icon > svg {
         width: 1.5em; height: 1.5em;
         fill: var(--button-text-color);
     }
@@ -661,4 +661,15 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     fill: currentColor;
     color: inherit;
     display: block;
+}
+
+/* SweetAlert2 Python import file fields */
+.func-planner-python-import-file {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    margin: 0.65rem 0 0;
+    text-align: left;
+    font-size: 0.95rem;
 }

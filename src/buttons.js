@@ -5,7 +5,7 @@
 
 import Swal from 'sweetalert2';
 
-import { reset, exportToPython, exportPythonTests, saveJSON, loadJSON } from './save-load.js';
+import { reset, exportToPython, exportPythonTests, saveJSON, loadJSON, loadPython } from './save-load.js';
 import { setSettings, SHOW_COLLAPSE_BUTTON, ALLOW_RECURSIVE } from './settings.js';
 import { updateDiagramTheme } from './diagram.js';
 import { loadSVG, htmlToNode, isMacOS } from './utils.js';
@@ -16,6 +16,7 @@ import resetIcon from '../images/reset.svg';
 import undoIcon from '../images/undo.svg';
 import redoIcon from '../images/redo.svg';
 import pythonIcon from '../images/python.svg';
+import pythonImportIcon from '../images/python-import.svg';
 import unitTestsIcon from '../images/unit-tests.svg';
 import saveIcon from '../images/save.svg';
 import loadIcon from '../images/load.svg';
@@ -213,6 +214,9 @@ function makeWidgetButtons(parentDiv, diagram, model, options={}) {
     }
     if (options.showLoadJSON && !globalReadonly) {
         addButton(buttons, loadIcon, 'no-outline', 'Load from JSON', () => { loadJSON(model, options); });
+    }
+    if (options.showImportPython && options.pythonCodeToModel && !globalReadonly) {
+        addButton(buttons, pythonImportIcon, '', 'Import from Python', () => { loadPython(model, options); });
     }
 }
 

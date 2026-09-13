@@ -51,6 +51,8 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
  * @param {boolean} options.callGraphOnly - If true, hides the module and function inspectors, only shows the call graph (and suppresses most problem checking)
  * @param {boolean} [options.showSaveJSON] Show Save as JSON (default: true when local, false when collaborative)
  * @param {boolean} [options.showLoadJSON] Show Load from JSON (default: true when local, false when collaborative)
+ * @param {boolean} [options.showImportPython] Show Import from Python (default: false; requires pythonCodeToModel)
+ * @param {function} [options.pythonCodeToModel] Host-injected `(code, { tests? }) => model` for Python import
  * @param {boolean} [options.showTestDocumentation] Show module test documentation (default: false)
  * @param {boolean} [options.showGlobalCode] Show module global code editor (default: false)
  * @param {boolean} [options.showTestGlobalCode] Show test global code editor (default: false)
@@ -95,6 +97,7 @@ export default function init(
     // Local demos default to Save/Load JSON on; collaborative hosts opt in explicitly.
     options.showSaveJSON = options.showSaveJSON ?? !options.collaborative;
     options.showLoadJSON = options.showLoadJSON ?? !options.collaborative;
+    options.showImportPython = options.showImportPython ?? false;
     options.showTestDocumentation = options.showTestDocumentation ?? false;
     options.showGlobalCode = options.showGlobalCode ?? false;
     options.showTestGlobalCode = options.showTestGlobalCode ?? false;

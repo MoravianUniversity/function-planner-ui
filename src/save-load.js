@@ -10,6 +10,7 @@
  *  - reset(model, options, confirm=true)
  *  - saveJSON(model, options, includeProblems=false)
  *  - loadJSON(model, options)
+ *  - loadPython(model, options)
  */
 
 import Swal from 'sweetalert2';
@@ -510,6 +511,88 @@ function loadJSONString(model, options={}, json) {
             showCloseButton: true,
         });
     }
+}
+
+/**
+ * Import a Python source file (and optional tests file) into the model, replacing the current plan.
+ * Requires `options.pythonCodeToModel(code, { tests? })` injected by the host.
+ * @param {*} model
+ * @param {object} options
+ */
+export function loadPython(model, options={}) {
+    if (typeof options.pythonCodeToModel !== 'function') {
+        Swal.fire({
+            theme: options.theme,
+            title: "Import unavailable",
+            text: "Python import is not configured in this host.",
+            icon: "error",
+            showCloseButton: true,
+        });
+        return;
+    }
+
+    Swal.fire({
+        theme: options.theme,
+        title: "Import from Python",
+        html: `
+            <p>This will <em>overwrite</em> the current plan.</p>
+            <label class="func-planner-python-import-file">
+                <span>Python source</span>
+                <input type="file" class="func-planner-python-source" accept=".py,text/x-python,text/plain" />
+            </label>
+            <label class="func-planner-python-import-file">
+                <span>Tests file (optional)</span>
+                <input type="file" class="func-planner-python-tests" accept=".py,text/x-python,text/plain" />
+            </label>
+        `,
+        showCancelButton: true,
+        showCloseButton: true,
+        confirmButtonText: "Import",
+        focusConfirm: false,
+        preConfirm: async () => {
+            const popup = Swal.getPopup();
+            const sourceInput = popup.querySelector('.func-planner-python-source');
+            const testsInput = popup.querySelector('.func-planner-python-tests');
+            const sourceFile = sourceInput?.files?.[0];
+            if (!sourceFile) {
+                Swal.showValidationMessage('Choose a Python source file.');
+                return false;
+            }
+            try {
+                const python = await sourceFile.text();
+                if (!python.trim()) {
+                    Swal.showValidationMessage('The Python source file is empty.');
+                    return false;
+                }
+                const testsFile = testsInput?.files?.[0];
+                const tests = testsFile ? await testsFile.text() : '';
+                return { python, tests };
+            } catch (e) {
+                Swal.showValidationMessage('Could not read the selected file(s).');
+                return false;
+            }
+        },
+    }).then((result) => {
+        if (!result.isConfirmed || !result.value) { return; }
+        try {
+            const data = options.pythonCodeToModel(result.value.python, {
+                tests: result.value.tests || undefined,
+            });
+            if (!data?.functions || !data?.calls) {
+                throw new Error("Importer did not return a valid plan model.");
+            }
+            model.importModel(data);
+        } catch (e) {
+            console.error("Python import failed:", e);
+            Swal.fire({
+                theme: options.theme,
+                title: "Import failed",
+                text: e instanceof Error ? e.message : "Could not import the Python source.",
+                icon: "error",
+                showCloseButton: true,
+            });
+        }
+    });
 }
 
 function loadJSONFile(model, options={}, file) {
