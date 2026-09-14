@@ -28,6 +28,7 @@ jobs:
       - name: Install and build UI
         working-directory: function-planner-ui
         run: |
+          npm --prefix ../shared install
           npm install
           npm run build
 
