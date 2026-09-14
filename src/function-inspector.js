@@ -5,7 +5,7 @@
 import Sortable from 'sortablejs';
 import Swal from 'sweetalert2';
 
-import { wrapWithLabel, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly } from './inspector.js';
+import { wrapWithLabel, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly, isParamStructureReadOnly, isReturnStructureReadOnly, isParamFacetReadOnly, isReturnFacetReadOnly } from './inspector.js';
 import { loadSVG, makeOption, makeAddButton, makeRemoveButton } from './utils.js';
 import { authorLabel } from './authors.js';
 import { toEnglishType } from './type-utils.js';
@@ -220,6 +220,10 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
             if (clazz.startsWith("func-var-")) {
                 const [, , prop] = clazz.split('-'); // prop === "name" || prop === "desc"
                 setProp(getIndex(e), prop, e.target.value, e.target.selectionStart);
+                if (prop === "name" && !options.adminMode) {
+                    const ro = funcs.effectiveReadOnly();
+                    refreshListRO(ro);
+                }
             }
         }
     });
@@ -267,13 +271,24 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
         onUpdate: (evt) => { funcs.move(property, evt.oldIndex, evt.newIndex); },
     });
 
+    function listStructureRO(ro) {
+        return property === 'params' ? isParamStructureReadOnly(ro) : isReturnStructureReadOnly(ro);
+    }
+
     function itemIsRO(ro, index, name=null) {
+        if (listStructureRO(ro)) { return true; }
         return isReadOnly(ro, property) ||
             isReadOnly(ro, `${property}[${index}]`) ||
             (name && isReadOnly(ro, `${property}.${name}`));
     }
 
     function itemPropIsRO(ro, index, subprop, name=null) {
+        if (property === 'params' && (subprop === 'name' || subprop === 'type' || subprop === 'desc')) {
+            if (isParamFacetReadOnly(ro, name, subprop)) { return true; }
+        }
+        if (property === 'returns' && (subprop === 'type' || subprop === 'desc')) {
+            if (isReturnFacetReadOnly(ro, subprop)) { return true; }
+        }
         return isReadOnly(ro, property) ||
             isReadOnly(ro, `${property}[${index}]`) || isReadOnly(ro, `${property}[${index}].${subprop}`) ||
             (name && (isReadOnly(ro, `${property}.${name}`) || isReadOnly(ro, `${property}.${name}.${subprop}`)));
@@ -298,6 +313,15 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
         insert.classList.toggle("func-button-disabled", itemRO);
         remove.classList.toggle("func-button-disabled", itemRO);
         drag.classList.toggle("func-var-drag-disabled", itemRO);
+    }
+
+    function refreshListRO(ro) {
+        const masterRO = listStructureRO(ro) || isReadOnly(ro, property);
+        div.classList.toggle("func-vars-readonly", masterRO);
+        appendBtn.classList.toggle("func-button-disabled", masterRO);
+        for (let i = 0; i < list.children.length; i++) {
+            updateItemRO(list.children[i], i, ro);
+        }
     }
 
     funcs.listen(property, (value, rawProp, key) => {
@@ -335,13 +359,7 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
     // readonly listeners — PlanConfig rules keyed by function name
     if (!options.adminMode) {
         funcs.listen('name', () => {
-            const ro = funcs.effectiveReadOnly();
-            const masterRO = isReadOnly(ro, property);
-            div.classList.toggle("func-vars-readonly", masterRO);
-            appendBtn.classList.toggle("func-button-disabled", masterRO);
-            for (let i = 0; i < list.children.length; i++) {
-                updateItemRO(list.children[i], i, ro);
-            }
+            refreshListRO(funcs.effectiveReadOnly());
         });
     }
 

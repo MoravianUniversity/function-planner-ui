@@ -267,8 +267,11 @@ export function makeCodeEditorWithVisibility(options, field, funcs, title, place
     return div;
 }
 
+const ALL_PARAM_FACETS = ['structure', 'name', 'type', 'desc'];
+const ALL_RETURN_FACETS = ['structure', 'type', 'desc'];
+
 /** Empty/invalid patterns match nothing. */
-function functionNameMatchesPattern(name, pattern) {
+export function functionNameMatchesPattern(name, pattern) {
     const raw = typeof pattern === 'string' ? pattern.trim() : '';
     if (!raw) { return false; }
     try {
@@ -278,43 +281,145 @@ function functionNameMatchesPattern(name, pattern) {
     }
 }
 
+function normalizeCallReadOnlyFields(fields) {
+    const hasCalls = fields.includes('calls');
+    const hasInto = fields.includes('callsInto');
+    const hasOut = fields.includes('callsOutOf');
+    const rest = fields.filter((f) => f !== 'calls' && f !== 'callsInto' && f !== 'callsOutOf');
+    if (hasCalls || (hasInto && hasOut)) { return [...rest, 'calls']; }
+    if (hasInto) { return [...rest, 'callsInto']; }
+    if (hasOut) { return [...rest, 'callsOutOf']; }
+    return rest;
+}
+
+function equalFacetArrays(left, right) {
+    if (left.length !== right.length) { return false; }
+    const set = new Set(left);
+    return right.every((f) => set.has(f));
+}
+
+function isFullParamLockStored(lock) {
+    if (!lock) { return true; }
+    const forPat = typeof lock.for === 'string' ? lock.for.trim() : '';
+    if (forPat && forPat !== '.*') { return false; }
+    return equalFacetArrays(lock.facets || [], ALL_PARAM_FACETS);
+}
+
+function isFullReturnLockStored(lock) {
+    if (!lock) { return true; }
+    return equalFacetArrays(lock.facets || [], ALL_RETURN_FACETS);
+}
+
 /**
  * Effective per-function read-only from PlanConfig.functionReadOnly rules.
- * Matching rules merge: true wins; otherwise field names are unioned.
+ * Matching rules merge: true wins; otherwise fields union and param/return locks append.
  * @param {string} name
- * @param {{ for: string, fields: true|string[] }[]|null|undefined} rules
- * @returns {boolean|string[]}
+ * @param {{ for: string, fields: true|string[], paramLock?: object, returnLock?: object }[]|null|undefined} rules
+ * @returns {false|true|{ fields: string[], params: object[], returns: object[] }}
  */
 export function resolveFunctionReadOnly(name, rules) {
     if (!Array.isArray(rules) || rules.length === 0) { return false; }
     const fields = new Set();
+    const params = [];
+    const returns = [];
     for (const rule of rules) {
         if (!rule || typeof rule.for !== 'string' || !functionNameMatchesPattern(name, rule.for)) {
             continue;
         }
         if (rule.fields === true) { return true; }
-        if (Array.isArray(rule.fields)) {
-            for (const field of rule.fields) { fields.add(field); }
+        if (!Array.isArray(rule.fields)) { continue; }
+        for (const field of rule.fields) {
+            if (field === 'params' || field === 'returns') { continue; }
+            fields.add(field);
+        }
+        if (rule.fields.includes('params')) {
+            if (rule.paramLock && !isFullParamLockStored(rule.paramLock)) {
+                const facets = (rule.paramLock.facets || []).filter((f) => ALL_PARAM_FACETS.includes(f));
+                if (facets.length > 0) {
+                    const forPat = typeof rule.paramLock.for === 'string' ? rule.paramLock.for.trim() : '';
+                    params.push({ for: forPat || '.*', facets });
+                }
+            } else {
+                params.push({ for: '.*', facets: [...ALL_PARAM_FACETS] });
+            }
+        }
+        if (rule.fields.includes('returns')) {
+            if (rule.returnLock && !isFullReturnLockStored(rule.returnLock)) {
+                const facets = (rule.returnLock.facets || []).filter((f) => ALL_RETURN_FACETS.includes(f));
+                if (facets.length > 0) { returns.push({ facets }); }
+            } else {
+                returns.push({ facets: [...ALL_RETURN_FACETS] });
+            }
         }
     }
-    return fields.size === 0 ? false : [...fields];
+    const normalizedFields = normalizeCallReadOnlyFields([...fields]);
+    if (normalizedFields.length === 0 && params.length === 0 && returns.length === 0) { return false; }
+    return { fields: normalizedFields, params, returns };
+}
+
+export function isParamStructureReadOnly(policy) {
+    if (policy === true) { return true; }
+    if (!policy || policy === false) { return false; }
+    if (Array.isArray(policy)) { return policy.includes('params'); }
+    return (policy.params || []).some((lock) => lock.facets.includes('structure'));
+}
+
+export function isReturnStructureReadOnly(policy) {
+    if (policy === true) { return true; }
+    if (!policy || policy === false) { return false; }
+    if (Array.isArray(policy)) { return policy.includes('returns'); }
+    return (policy.returns || []).some((lock) => lock.facets.includes('structure'));
+}
+
+export function isParamFacetReadOnly(policy, paramName, facet) {
+    if (policy === true) { return true; }
+    if (!policy || policy === false) { return false; }
+    if (Array.isArray(policy)) {
+        return policy.includes('params') ||
+            (paramName && (policy.includes(`params.${paramName}`) || policy.includes(`params.${paramName}.${facet}`)));
+    }
+    const name = paramName?.toString() ?? '';
+    return (policy.params || []).some(
+        (lock) => lock.facets.includes(facet) && functionNameMatchesPattern(name, lock.for)
+    );
+}
+
+export function isReturnFacetReadOnly(policy, facet) {
+    if (policy === true) { return true; }
+    if (!policy || policy === false) { return false; }
+    if (Array.isArray(policy)) { return policy.includes('returns'); }
+    return (policy.returns || []).some((lock) => lock.facets.includes(facet));
 }
 
 /**
  * Checks if a particular part of a read-only policy applies.
- * Policy is a boolean (all/none) or an array of field names from PlanConfig
- * (moduleReadOnly / resolveFunctionReadOnly).
- * The part/type can be:
- *      one of the fields: 'name', 'params', 'returns', 'desc', 'io', 'testable', 'code', …
- *      one of the sub-fields: 'params.{name}', 'params[{index}]', 'returns[{index}]'
- *      one of the special values: 'calls', 'callsInto', 'callsOutOf'
- *      module fields: 'documentation', 'testDocumentation', 'globalCode', 'testGlobalCode'
- * @param {boolean|string[]} policy
+ * Policy is a boolean, string[] (module / legacy), or resolved function policy object.
+ * @param {boolean|string[]|object} policy
  * @param {string} type
  * @param {{ adminMode?: boolean }} [options]
  * @returns {boolean} whether the type is read-only
  */
 export function isReadOnly(policy, type, options={}) {
     if (options.adminMode) { return false; }
-    return (policy === true || (Array.isArray(policy) && policy.includes(type)));
+    if (policy === true) { return true; }
+    if (policy === false || policy == null) { return false; }
+    if (Array.isArray(policy)) { return policy.includes(type); }
+    if (typeof policy === 'object') {
+        if (type === 'params') {
+            return (policy.params || []).some(
+                (lock) => lock.for === '.*' && equalFacetArrays(lock.facets, ALL_PARAM_FACETS)
+            );
+        }
+        if (type === 'returns') {
+            return (policy.returns || []).some((lock) => equalFacetArrays(lock.facets, ALL_RETURN_FACETS));
+        }
+        if (type === 'callsInto') {
+            return (policy.fields || []).includes('callsInto') || (policy.fields || []).includes('calls');
+        }
+        if (type === 'callsOutOf') {
+            return (policy.fields || []).includes('callsOutOf') || (policy.fields || []).includes('calls');
+        }
+        return (policy.fields || []).includes(type);
+    }
+    return false;
 }

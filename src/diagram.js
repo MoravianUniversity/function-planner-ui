@@ -836,9 +836,19 @@ function findSiblingNodes(node) {
 }
 
 function isCallsIntoRO(ro) {
-    return ro === true || (Array.isArray(ro) && (ro.includes('callsInto') || ro.includes('calls')));
+    if (ro === true) { return true; }
+    if (Array.isArray(ro)) { return ro.includes('callsInto') || ro.includes('calls'); }
+    if (ro && typeof ro === 'object' && Array.isArray(ro.fields)) {
+        return ro.fields.includes('callsInto') || ro.fields.includes('calls');
+    }
+    return false;
 }
 
 function isCallsOutOfRO(ro) {
-    return ro === true || (Array.isArray(ro) && (ro.includes('callsOutOf') || ro.includes('calls')));
+    if (ro === true) { return true; }
+    if (Array.isArray(ro)) { return ro.includes('callsOutOf') || ro.includes('calls'); }
+    if (ro && typeof ro === 'object' && Array.isArray(ro.fields)) {
+        return ro.fields.includes('callsOutOf') || ro.fields.includes('calls');
+    }
+    return false;
 }
