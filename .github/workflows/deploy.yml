@@ -25,12 +25,6 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
 
-      - name: Install and build shared
-        working-directory: shared
-        run: |
-          npm install
-          npm run build
-
       - name: Install and build UI
         working-directory: function-planner-ui
         run: |
