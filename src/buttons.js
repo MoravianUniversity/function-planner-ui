@@ -215,7 +215,7 @@ function makeWidgetButtons(parentDiv, diagram, model, options={}) {
     if (options.showLoadJSON && !globalReadonly) {
         addButton(buttons, loadIcon, 'no-outline', 'Load from JSON', () => { loadJSON(model, options); });
     }
-    if (options.showImportPython && options.pythonCodeToModel && !globalReadonly) {
+    if (options.showImportPython && !globalReadonly) {
         addButton(buttons, pythonImportIcon, '', 'Import from Python', () => { loadPython(model, options); });
     }
 }

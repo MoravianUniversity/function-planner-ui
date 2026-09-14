@@ -14,6 +14,7 @@
  */
 
 import Swal from 'sweetalert2';
+import { pythonCodeToModel } from '@function-planner/shared';
 
 import pythonIcon from '../images/python.svg';
 import unitTestsIcon from '../images/unit-tests.svg';
@@ -515,22 +516,10 @@ function loadJSONString(model, options={}, json) {
 
 /**
  * Import a Python source file (and optional tests file) into the model, replacing the current plan.
- * Requires `options.pythonCodeToModel(code, { tests? })` injected by the host.
  * @param {*} model
  * @param {object} options
  */
 export function loadPython(model, options={}) {
-    if (typeof options.pythonCodeToModel !== 'function') {
-        Swal.fire({
-            theme: options.theme,
-            title: "Import unavailable",
-            text: "Python import is not configured in this host.",
-            icon: "error",
-            showCloseButton: true,
-        });
-        return;
-    }
-
     Swal.fire({
         theme: options.theme,
         title: "Import from Python",
@@ -575,7 +564,7 @@ export function loadPython(model, options={}) {
     }).then((result) => {
         if (!result.isConfirmed || !result.value) { return; }
         try {
-            const data = options.pythonCodeToModel(result.value.python, {
+            const data = pythonCodeToModel(result.value.python, {
                 tests: result.value.tests || undefined,
             });
             if (!data?.functions || !data?.calls) {

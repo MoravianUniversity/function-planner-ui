@@ -103,8 +103,7 @@ function scrollMinimallyToShow(diagram, bounds) {
  * @param {boolean} options.callGraphOnly - If true, hides the module and function inspectors, only shows the call graph (and suppresses most problem checking)
  * @param {boolean} [options.showSaveJSON] Show Save as JSON (default: true when local, false when collaborative)
  * @param {boolean} [options.showLoadJSON] Show Load from JSON (default: true when local, false when collaborative)
- * @param {boolean} [options.showImportPython] Show Import from Python (default: false; requires pythonCodeToModel)
- * @param {function} [options.pythonCodeToModel] Host-injected `(code, { tests? }) => model` for Python import
+ * @param {boolean} [options.showImportPython] Show Import from Python (default: false)
  * @param {boolean} [options.showTestDocumentation] Show module test documentation (default: false)
  * @param {boolean} [options.showGlobalCode] Show module global code editor (default: false)
  * @param {boolean} [options.showTestGlobalCode] Show test global code editor (default: false)
