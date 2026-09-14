@@ -185,6 +185,7 @@ export default function init(
         const [funcInspector, setFuncInspectorKey] = makeFunctionInspector(model, options);
         inspectorDiv.append(moduleInspector, funcInspector);
         funcInspector.style.display = 'none';
+        editingPresence.attachInspector(inspectorDiv);
         diagram.addDiagramListener('ChangedSelection', (e) => {
             let subject = e.subject.first();
             if (!subject) {
