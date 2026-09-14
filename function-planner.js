@@ -15,6 +15,7 @@ import { setupProblemChecking } from './src/problem-checker.js';
 import { setupInspector } from './src/inspector.js';
 import { makeFunctionInspector } from './src/function-inspector.js';
 import { makeModuleInspector } from './src/module-inspector.js';
+import { setupEditingPresence } from './src/editing-presence.js';
 
 import './function-planner.css';
 
@@ -23,6 +24,57 @@ const BASIC_MODEL = {
     calls: []
 };
 const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', 'dict', 'set'];
+
+/** Small inset so the node isn't flush against the viewport edge after a jump. */
+const JUMP_VIEW_PADDING = 12;
+
+/**
+ * Shift the diagram position by the smallest amount that fully shows `bounds`.
+ * No-op when already entirely in view. (Unlike Diagram.scrollToRect, does not center.)
+ * @param {go.Diagram} diagram
+ * @param {go.Rect} bounds
+ */
+function scrollMinimallyToShow(diagram, bounds) {
+    if (!bounds || !bounds.isReal()) {
+        return;
+    }
+    const view = diagram.viewportBounds;
+    const pad = JUMP_VIEW_PADDING;
+    const left = bounds.x - pad;
+    const right = bounds.right + pad;
+    const top = bounds.y - pad;
+    const bottom = bounds.bottom + pad;
+
+    let x = view.x;
+    let y = view.y;
+    const vw = view.width;
+    const vh = view.height;
+
+    if (right - left <= vw) {
+        if (left < view.x) {
+            x = left;
+        } else if (right > view.right) {
+            x = right - vw;
+        }
+    } else {
+        // Wider than the viewport: pin the left edge into view.
+        x = left;
+    }
+
+    if (bottom - top <= vh) {
+        if (top < view.y) {
+            y = top;
+        } else if (bottom > view.bottom) {
+            y = bottom - vh;
+        }
+    } else {
+        y = top;
+    }
+
+    if (x !== view.x || y !== view.y) {
+        diagram.position = new go.Point(x, y);
+    }
+}
 
 /**
  * Initialize the Function Planner in the given root element.
@@ -65,6 +117,7 @@ const DEFAULT_ALLOWED_TYPES = ['int', 'float', 'str', 'bool', 'list', 'tuple', '
  * @param {Record<string, string>} [options.authorLabels] Map of stable author id → display name.
  *   When an id has no entry, the id itself is shown (free-text / demo authors).
  * @param {import('yjs').Doc} [options.ydoc] External Y.Doc shared with a WebsocketProvider (server is source of truth)
+ * @param {import('y-protocols/awareness').Awareness} [options.awareness] Shared awareness from the host WebsocketProvider
  * @param {boolean} [options.useIndexedDB] Local IndexedDB persistence; defaults to false when ydoc is set, otherwise true
  * @param {boolean} [options.readonly] Global read-only mode (diagram + inspectors still visible)
  * @param {string} [options.licenseKey] GoJS license key (optional; academic demos may omit)
@@ -123,6 +176,8 @@ export default function init(
     }
     setupProblemChecking(model, options);
 
+    const editingPresence = setupEditingPresence(diagram, options);
+
     // Show the appropriate inspector based on selection
     if (!options.callGraphOnly) {
         const inspectorDiv = setupInspector(diagram.div);
@@ -135,6 +190,7 @@ export default function init(
             if (!subject) {
                 moduleInspector.style.display = '';
                 funcInspector.style.display = 'none';
+                editingPresence.publishEditingKey(null);
             } else if (subject instanceof go.Link) {
                 return; // keep same
                 // or could show the fromNode in function inspector or revert to module inspector
@@ -142,6 +198,7 @@ export default function init(
                 setFuncInspectorKey(subject.data.key);
                 moduleInspector.style.display = 'none';
                 funcInspector.style.display = '';
+                editingPresence.publishEditingKey(subject.data.key);
             }
         });
     }
@@ -160,14 +217,47 @@ export default function init(
             options.externalAuthors = ids;
             options.authorLabels = labels && typeof labels === 'object' ? { ...labels } : {};
             if (ids == null) {
+                editingPresence.refreshEditors();
                 return;
             }
             model.syncExternalAuthors(ids, options.authorLabels);
             // Refresh label-dependent UI when ids are unchanged but names changed.
             model.notifyModelData('authors');
             diagram.findTopLevelGroups().each((group) => { group.updateTargetBindings(); });
+            editingPresence.refreshEditors();
+        },
+        /**
+         * Select a function node and scroll just enough for it to be fully visible.
+         * @param {string} key
+         * @returns {boolean} true if the node was found
+         */
+        jumpToFunction(key) {
+            if (key == null || key === '') {
+                return false;
+            }
+            const node = diagram.findNodeForKey(key);
+            if (!node) {
+                return false;
+            }
+            diagram.select(node);
+            node.ensureBounds();
+            // Unconnected nodes are viewport-aligned (not in document bounds). Scrolling
+            // to their document coords corrupts the digraph viewport.
+            if (node.layerName !== 'Unconnected') {
+                scrollMinimallyToShow(diagram, node.actualBounds);
+            }
+            return true;
+        },
+        /**
+         * Clear function selection so the module inspector is shown (member at module level).
+         * @returns {boolean}
+         */
+        jumpToModule() {
+            diagram.clearSelection();
+            return true;
         },
         destroy() {
+            editingPresence.destroy();
             try {
                 diagram.div?.querySelectorAll('*');
                 diagram.clear();
