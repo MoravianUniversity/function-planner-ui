@@ -6,7 +6,7 @@ import Sortable from 'sortablejs';
 import Swal from 'sweetalert2';
 
 import { wrapWithLabel, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly, isParamStructureReadOnly, isReturnStructureReadOnly, isParamFacetReadOnly, isReturnFacetReadOnly } from './inspector.js';
-import { loadSVG, makeOption, makeAddButton, makeRemoveButton } from './utils.js';
+import { loadSVG, makeOption, makeAddButton, makeRemoveButton, setTextInputValue } from './utils.js';
 import { authorLabel } from './authors.js';
 import { toEnglishType } from './type-utils.js';
 
@@ -113,7 +113,7 @@ function makeFuncName(funcs) {
     });
     funcs.listen('name', (value) => {
         value = value?.toString() || '';
-        if (input.value !== value) { input.value = value; }
+        setTextInputValue(input, value);
         updateName();
     });
     funcs.listenRO('name', (value) => { input.readOnly = value; });
@@ -351,7 +351,7 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
             if (input) {
                 const val = value?.toString() ?? "";
                 if (prop === "type") { setCustomTypeOption(input, val); }
-                else if (input.value !== val) { input.value = val; }
+                else { setTextInputValue(input, val); }
             }
         }
     });
@@ -373,7 +373,7 @@ function updateVarBox(list, index, value, hasName) {
     if (hasName) {
         const val = value.name?.toString() ?? "";
         const name = box.querySelector(".func-var-name");
-        if (name.value !== val) { name.value = val; }
+        setTextInputValue(name, val);
     }
 
     // update type
@@ -384,7 +384,7 @@ function updateVarBox(list, index, value, hasName) {
     // update description
     const val = value.desc?.toString() ?? "";
     const desc = box.querySelector(".func-var-desc");
-    if (desc.value !== val) { desc.value = val; }
+    setTextInputValue(desc, val);
 }
 function makeVarBox(model, options, hasName) {
     const box = document.createElement("div");

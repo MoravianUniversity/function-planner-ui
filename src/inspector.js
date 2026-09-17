@@ -5,6 +5,8 @@
 import Prism from "prismjs";
 import 'prismjs/components/prism-python.min.js';
 
+import { setTextInputValue } from './utils.js';
+
 /**
  * Sets up a resizable inspector div next to the diagram div.
  * @param {HTMLElement} diagramDiv - the diagram div
@@ -174,8 +176,7 @@ export function makeTextarea(field, funcs, attrs={}) {
     textarea.addEventListener('input', (e) => { funcs.set(field, e.target.value, e.target.selectionStart); });
     funcs.listen(field, (value) => {
         value = value?.toString() || '';
-        if (textarea.value !== value) {
-            textarea.value = value;
+        if (setTextInputValue(textarea, value)) {
             textarea.rows = value.trim().split('\n').length + 2;
             resize();
         }

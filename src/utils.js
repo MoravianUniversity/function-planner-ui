@@ -1,7 +1,75 @@
 /** Utility functions. */
 
+import diff from 'fast-diff';
+
 import addIcon from '../images/add.svg';
 import removeIcon from '../images/remove.svg';
+
+/**
+ * Map a cursor offset in oldText to the corresponding offset in newText.
+ * Used so collaborative remote edits don't leave the caret stranded.
+ * Inserts at the caret use before-bias (caret does not jump past the insert).
+ * @param {string} oldText
+ * @param {string} newText
+ * @param {number} cursor
+ * @returns {number}
+ */
+export function mapCursorOffset(oldText, newText, cursor) {
+    if (typeof cursor !== 'number' || cursor < 0) { return 0; }
+    const parts = diff(oldText, newText);
+    let oldPos = 0;
+    let mapped = cursor;
+    for (const [op, text] of parts) {
+        const len = text.length;
+        if (op === diff.EQUAL) {
+            oldPos += len;
+        } else if (op === diff.DELETE) {
+            if (cursor >= oldPos + len) {
+                mapped -= len;
+            } else if (cursor > oldPos) {
+                mapped -= cursor - oldPos;
+            }
+            oldPos += len;
+        } else if (op === diff.INSERT) {
+            if (cursor > oldPos) {
+                mapped += len;
+            }
+        }
+    }
+    return Math.max(0, Math.min(mapped, newText.length));
+}
+
+/**
+ * Set an input/textarea value. When the element is focused, preserve (and
+ * adjust) the selection so remote collaborative updates don't jump the caret
+ * to the end of the field.
+ * @param {HTMLInputElement|HTMLTextAreaElement} el
+ * @param {string} value
+ * @returns {boolean} True if the value changed.
+ */
+export function setTextInputValue(el, value) {
+    value = value ?? '';
+    if (el.value === value) { return false; }
+    const focused = document.activeElement === el;
+    if (!focused) {
+        el.value = value;
+        return true;
+    }
+    const oldValue = el.value;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    el.value = value;
+    if (typeof start === 'number') {
+        const newStart = mapCursorOffset(oldValue, value, start);
+        const newEnd = typeof end === 'number' ? mapCursorOffset(oldValue, value, end) : newStart;
+        try {
+            el.setSelectionRange(newStart, newEnd);
+        } catch (_) {
+            // Some input types do not support selection ranges.
+        }
+    }
+    return true;
+}
 
 /**
  * Deep equality check for two values, recursively checking objects and arrays.
