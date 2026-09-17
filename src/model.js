@@ -199,7 +199,13 @@ export class Model {
     #fireListeners(listeners, ...args) {
         if (this.#suppressObservers) { return; }
         if (listeners) {
-            for (const callback of listeners) { callback(...args); }
+            for (const callback of listeners) {
+                try {
+                    callback(...args);
+                } catch (err) {
+                    console.error('Model listener error:', err);
+                }
+            }
         }
     }
 
@@ -804,37 +810,30 @@ export class Model {
         this.#remove(this.callingFunctions, to, from);
         this.#fireCallListeners('delete', from, to, null, null);
     }
-    #updateCall(oldKey, newKey) {
-        const [oldFrom, oldTo] = oldKey.split('-');
-        const [newFrom, newTo] = newKey.split('-');
-        this.#remove(this.calledFunctions, oldFrom, oldTo);
-        this.#remove(this.callingFunctions, oldTo, oldFrom);
-        this.#push(this.calledFunctions, newFrom, newTo);
-        this.#push(this.callingFunctions, newTo, newFrom);
-        this.#fireCallListeners('update', oldFrom, oldTo, newFrom, newTo);
-    }
+    /**
+     * Apply call map changes as independent deletes then adds.
+     * Do not pair delete+add as "update" — Yjs often batches unrelated
+     * call mutations into one event under concurrent collaboration, and
+     * that heuristic corrupted indexes and left ghost GoJS links.
+     * Intentional relinks (`updateFuncCall`) still work as delete+add.
+     */
     #callObserver(event) {
-        let lastDelete = null; // used to track delete + add as update
+        const deletes = [];
+        const adds = [];
         for (const [key, {action, oldValue}] of event.changes.keys) {
             if (action === 'add') {
-                if (lastDelete !== null) {
-                    // treat as update
-                    this.#updateCall(lastDelete, key);
-                    lastDelete = null;
-                } else { this.#addCall(key); }
+                adds.push(key);
             } else if (action === 'delete') {
-                if (lastDelete !== null) { this.#deleteCall(lastDelete); } // fire previous delete
-                lastDelete = key;
+                deletes.push(key);
             } else if (action === 'update') {
-                if (oldValue === this.calls.get(key)) {
-                    // no change, do nothing [why does this happen?]
-                } else {
+                if (oldValue !== this.calls.get(key)) {
                     console.warn('Unexpected update action on Yjs calls map');
                     console.warn(action, key, oldValue, "->", this.calls.get(key));
                 }
             }
         }
-        if (lastDelete !== null) { this.#deleteCall(lastDelete); } // fire last delete
+        for (const key of deletes) { this.#deleteCall(key); }
+        for (const key of adds) { this.#addCall(key); }
     }
 
     /**

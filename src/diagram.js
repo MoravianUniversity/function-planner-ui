@@ -8,6 +8,7 @@ import { updateAllProblems, updateInterNodeProblems, willFuncBecomeRecursive } f
 import { ALLOW_RECURSIVE, SHOW_COLLAPSE_BUTTON } from './settings.js';
 import { resolveFunctionReadOnly } from './inspector.js';
 import { authorLabel } from './authors.js';
+import { deepEquals } from './utils.js';
 
 const DEFAULTS = {
     'name': '',
@@ -191,6 +192,8 @@ export function setupDiagram(
     rootElem.appendChild(diagramDiv);
     let reversingLink = false;
     let resequencing = false;
+    let reconciling = false;
+    let reconcileTimer = null;
 
     if (options.licenseKey) {
         go.Diagram.licenseKey = options.licenseKey;
@@ -468,7 +471,7 @@ export function setupDiagram(
     diagram.addModelChangedListener((evt) => {
         // When the UndoManager is enabled, the CommittedTransaction event has an evt.object that is the transaction
         // However, when disabled, the CommittedTransaction event has evt.object===null so we must check each event change instead
-        if (reversingLink) { return; }
+        if (reversingLink || reconciling) { return; }
         if (diagram.undoManager.isEnabled) {
             if (!evt.isTransactionFinished) { return; }
             if (evt.object == null || (evt.object.name !== "Linking" && evt.object.name !== "Relinking")) { return; }
@@ -496,6 +499,111 @@ export function setupDiagram(
             diagram.model.setGroupKeyForNodeData(node.data, undefined);
         }
     }
+    /** Debounced safety net: heal GoJS drift vs Yjs without a full rebuild. */
+    function scheduleReconcile() {
+        if (reconcileTimer != null) { clearTimeout(reconcileTimer); }
+        reconcileTimer = setTimeout(() => {
+            reconcileTimer = null;
+            reconcileDiagramFromModel();
+        }, 75);
+    }
+    function reconcileDiagramFromModel() {
+        if (!model.synced) { return; }
+        reconciling = true;
+        let changed = false;
+        try {
+            const yFuncKeys = new Set(model.functions.keys());
+
+            // Remove orphan function nodes (not author groups)
+            const orphanNodes = [];
+            diagram.nodes.each((node) => {
+                if (node.data?.isGroup) { return; }
+                if (!yFuncKeys.has(String(node.data.key))) { orphanNodes.push(node); }
+            });
+            for (const node of orphanNodes) {
+                if (diagram.selection.contains(node)) { diagram.clearSelection(); }
+                maybeRemoveGroup(node);
+                diagram.model.removeNodeData(node.data);
+                changed = true;
+            }
+
+            // Add missing function nodes and sync key props
+            for (const key of yFuncKeys) {
+                let data = model.functions.get(key).toJSON();
+                delete data.isTrusted;
+                if (!('name' in data) || isBlankFunctionName(data.name)) { data.name = 'function'; }
+                let name = data.name?.toString()?.trim();
+                if (name === '') { name = 'function'; }
+                data = {
+                    ...data,
+                    name,
+                    io: data.io ?? DEFAULTS.io,
+                    testable: data.testable ?? DEFAULTS.testable,
+                    params: data.params ?? DEFAULTS.params,
+                    returns: data.returns ?? DEFAULTS.returns,
+                };
+
+                let node = diagram.findNodeForKey(key);
+                if (!node) {
+                    if (data.sequence == null) {
+                        const parsed = Number.parseInt(key, 10);
+                        data.sequence = Number.isFinite(parsed) ? parsed : Date.now();
+                    }
+                    const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name) };
+                    diagram.model.addNodeData(nodeData);
+                    node = diagram.findNodeForKey(key);
+                    node.layerName = getLayerName(node);
+                    if (node.layerName === 'Unconnected') {
+                        nodeIsBecomingUnconnected(node);
+                    } else {
+                        nodeIsBecomingConnected(node);
+                    }
+                    if (options.canClaimFuncs && data.owner) {
+                        setGroup(node, data.owner);
+                    }
+                    changed = true;
+                } else {
+                    const syncProps = ['io', 'name', 'testable', 'params', 'returns'];
+                    for (const prop of syncProps) {
+                        const next = data[prop];
+                        if (!deepEquals(node.data[prop], next)) {
+                            diagram.model.setDataProperty(node.data, prop, next);
+                            if (prop === 'name') {
+                                diagram.model.setDataProperty(node.data, 'readOnly', effectiveNodeReadOnly(next));
+                            }
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            // Diff links
+            const yCalls = new Set(model.calls.keys());
+            const linksToRemove = [];
+            diagram.links.each((link) => {
+                const callKey = `${link.data.from}-${link.data.to}`;
+                if (!yCalls.has(callKey)) { linksToRemove.push(link.data); }
+            });
+            for (const linkData of linksToRemove) {
+                diagram.model.removeLinkData(linkData);
+                changed = true;
+            }
+            for (const callKey of yCalls) {
+                const [from, to] = callKey.split('-');
+                if (diagram.findLinksByExample({ from, to }).count === 0) {
+                    // Only add if both endpoints exist (node may still be mid-reconcile)
+                    if (diagram.findNodeForKey(from) && diagram.findNodeForKey(to)) {
+                        diagram.model.addLinkData({ from, to });
+                        changed = true;
+                    }
+                }
+            }
+        } finally {
+            reconciling = false;
+        }
+        if (changed) { updateUnconnectedNodesLayout(diagram); }
+    }
+    model.addListener('synced', () => { scheduleReconcile(); });
     model.addModelDataListener('authors', (_, newValue) => {
         diagram.findTopLevelGroups().each(group => group.updateTargetBindings('key'));
     });
@@ -524,6 +632,7 @@ export function setupDiagram(
             diagram.select(diagram.findNodeForKey(key));
         }
         updateUnconnectedNodesLayout(diagram);
+        scheduleReconcile();
     });
     model.addFuncRemoveListener((key) => {
         const node = diagram.findNodeForKey(key);
@@ -534,6 +643,7 @@ export function setupDiagram(
         }
         updateInterNodeProblems(model, options);
         updateUnconnectedNodesLayout(diagram);
+        scheduleReconcile();
     });
     model.addFuncListener('', (key, property, newValue) => {
         const node = diagram.findNodeForKey(key);
@@ -549,6 +659,7 @@ export function setupDiagram(
                 const field = nestedArray[1];
                 const arr = model.functions.get(key)?.get(field)?.toJSON() ?? [];
                 diagram.model.setDataProperty(node.data, field, arr);
+                scheduleReconcile();
                 return;
             }
             let changed = false;
@@ -577,6 +688,12 @@ export function setupDiagram(
                 }
             }
             else { diagram.model.setDataProperty(node.data, property, newValue); }
+            if (property === 'io' || property === 'testable' || property === 'name') {
+                scheduleReconcile();
+            }
+        } else {
+            // Missed incremental add — heal on the next reconcile pass.
+            scheduleReconcile();
         }
     });
     model.addFuncListener('problems', (key, _, newValue) => {
@@ -594,21 +711,33 @@ export function setupDiagram(
                 diagram.model.addLinkData({ from: newFrom, to: newTo });
                 changed = true;
             }
-        } else {
+        } else if (action === 'problems') {
             const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
             if (link) {
-                if (action === 'problems') {
-                    diagram.model.setDataProperty(link.data, 'problems', [...newFrom]);
-                } else if (action === 'delete') {
-                    diagram.model.removeLinkData(link.data);
-                    changed = true;
-                } else if (action === 'update') {
-                    if (newFrom !== oldFrom) { diagram.model.setDataProperty(link.data, 'from', newFrom); changed = true; }
-                    if (newTo !== oldTo) { diagram.model.setDataProperty(link.data, 'to', newTo); changed = true; }
-                }
+                diagram.model.setDataProperty(link.data, 'problems', [...newFrom]);
+            }
+        } else if (action === 'delete') {
+            const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
+            if (link) {
+                diagram.model.removeLinkData(link.data);
+                changed = true;
+            } else {
+                // Link missing or endpoints diverged — reconcile will drop ghosts.
+                scheduleReconcile();
+            }
+        } else if (action === 'update') {
+            const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
+            if (link) {
+                if (newFrom !== oldFrom) { diagram.model.setDataProperty(link.data, 'from', newFrom); changed = true; }
+                if (newTo !== oldTo) { diagram.model.setDataProperty(link.data, 'to', newTo); changed = true; }
+            } else {
+                scheduleReconcile();
             }
         }
         if (changed) { updateUnconnectedNodesLayout(diagram); }
+        if (action === 'add' || action === 'delete' || action === 'update') {
+            scheduleReconcile();
+        }
     });
     diagram.addDiagramListener('LayoutCompleted', () => { updateUnconnectedNodesLayout(diagram); });
     diagram.addDiagramListener('SelectionMoved', () => {
