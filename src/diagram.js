@@ -859,12 +859,21 @@ function createToolTip(rootElem) {
     return new go.HTMLInfo({
         mainElement: toolTipElem,
         show: (obj, diagram, tool) => {
-            const pos = diagram.transformDocToView(obj.part.findObject('SHAPE').getDocumentPoint(go.Spot.BottomLeft));
-            toolTipElem.style.left = `${pos.x-10}px`;
-            toolTipElem.style.top = `${pos.y}px`;
-            const text = genToolTip(obj.part.data);
-            toolTipContent.innerHTML = text;
+            const shape = obj.part.findObject('SHAPE');
+            toolTipContent.innerHTML = genToolTip(obj.part.data);
             toolTipElem.style.display = 'block';
+
+            const belowPos = diagram.transformDocToView(shape.getDocumentPoint(go.Spot.BottomLeft));
+            toolTipElem.style.left = `${belowPos.x - 10}px`;
+            toolTipElem.style.top = `${belowPos.y}px`;
+
+            // Prefer below; flip above when the tooltip would overflow the container bottom
+            // (e.g. unconnected nodes along the bottom of the viewport).
+            const tooltipHeight = toolTipElem.offsetHeight;
+            if (belowPos.y + tooltipHeight > rootElem.clientHeight) {
+                const abovePos = diagram.transformDocToView(shape.getDocumentPoint(go.Spot.TopLeft));
+                toolTipElem.style.top = `${abovePos.y - tooltipHeight}px`;
+            }
             return toolTipElem;
         },
         hide: (diagram, tool) => { toolTipElem.style.display = 'none'; },
