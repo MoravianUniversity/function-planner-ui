@@ -158,3 +158,129 @@ describe('Model #callObserver', () => {
         expect(model.calls.has('4-5')).toBe(true);
     });
 });
+
+describe('Model importModel calls', () => {
+    let model;
+
+    beforeEach(() => {
+        model = createModel();
+    });
+
+    afterEach(() => {
+        model.destroy();
+    });
+
+    it('fires call adds with string endpoints when JSON uses numeric from/to', () => {
+        const events = callEvents(model);
+        model.importModel({
+            functions: [
+                { key: 1, name: 'main' },
+                { key: 2, name: 'helper' },
+            ],
+            calls: [{ from: 1, to: 2 }],
+        });
+
+        expect([...model.calls.keys()]).toEqual(['1-2']);
+        expect(events).toEqual([
+            { action: 'add', oldFrom: null, oldTo: null, newFrom: '1', newTo: '2' },
+        ]);
+        expect(model.calledFunctions['1']).toEqual(['2']);
+        expect(model.callingFunctions['2']).toEqual(['1']);
+    });
+
+    it('replaces prior calls and keeps string endpoints on re-import', () => {
+        model.importModel({
+            functions: [
+                { key: '0', name: 'a' },
+                { key: '1', name: 'b' },
+            ],
+            calls: [{ from: '0', to: '1' }],
+        });
+        const events = callEvents(model);
+        model.importModel({
+            functions: [
+                { key: 0, name: 'a' },
+                { key: 1, name: 'b' },
+                { key: 2, name: 'c' },
+            ],
+            calls: [
+                { from: 0, to: 2 },
+                { from: 2, to: 1 },
+            ],
+        });
+
+        expect([...model.calls.keys()].sort()).toEqual(['0-2', '2-1']);
+        expect(events.filter((e) => e.action === 'add')).toEqual([
+            { action: 'add', oldFrom: null, oldTo: null, newFrom: '0', newTo: '2' },
+            { action: 'add', oldFrom: null, oldTo: null, newFrom: '2', newTo: '1' },
+        ]);
+        expect(model.calledFunctions['0']).toEqual(['2']);
+        expect(model.calledFunctions['2']).toEqual(['1']);
+        expect(model.callingFunctions['2']).toEqual(['0']);
+        expect(model.callingFunctions['1']).toEqual(['2']);
+        expect(model.calledFunctions['0'] || []).not.toContain('1');
+    });
+});
+
+describe('Model importModel calls', () => {
+    let model;
+
+    beforeEach(() => {
+        model = createModel();
+    });
+
+    afterEach(() => {
+        model.destroy();
+    });
+
+    it('fires call adds with string endpoints when JSON uses numeric from/to', () => {
+        const events = callEvents(model);
+        model.importModel({
+            functions: [
+                { key: 1, name: 'main' },
+                { key: 2, name: 'helper' },
+            ],
+            calls: [{ from: 1, to: 2 }],
+        });
+
+        expect([...model.calls.keys()]).toEqual(['1-2']);
+        expect(events).toEqual([
+            { action: 'add', oldFrom: null, oldTo: null, newFrom: '1', newTo: '2' },
+        ]);
+        expect(model.calledFunctions['1']).toEqual(['2']);
+        expect(model.callingFunctions['2']).toEqual(['1']);
+    });
+
+    it('replaces prior calls and keeps string endpoints on re-import', () => {
+        model.importModel({
+            functions: [
+                { key: '0', name: 'a' },
+                { key: '1', name: 'b' },
+            ],
+            calls: [{ from: '0', to: '1' }],
+        });
+        const events = callEvents(model);
+        model.importModel({
+            functions: [
+                { key: 0, name: 'a' },
+                { key: 1, name: 'b' },
+                { key: 2, name: 'c' },
+            ],
+            calls: [
+                { from: 0, to: 2 },
+                { from: 2, to: 1 },
+            ],
+        });
+
+        expect([...model.calls.keys()].sort()).toEqual(['0-2', '2-1']);
+        expect(events.filter((e) => e.action === 'add')).toEqual([
+            { action: 'add', oldFrom: null, oldTo: null, newFrom: '0', newTo: '2' },
+            { action: 'add', oldFrom: null, oldTo: null, newFrom: '2', newTo: '1' },
+        ]);
+        expect(model.calledFunctions['0']).toEqual(['2']);
+        expect(model.calledFunctions['2']).toEqual(['1']);
+        expect(model.callingFunctions['2']).toEqual(['0']);
+        expect(model.callingFunctions['1']).toEqual(['2']);
+        expect(model.calledFunctions['0'] || []).not.toContain('1');
+    });
+});

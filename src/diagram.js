@@ -577,12 +577,21 @@ export function setupDiagram(
                 }
             }
 
-            // Diff links
+            // Diff links (normalize endpoint types — JSON import may use numeric from/to)
             const yCalls = new Set(model.calls.keys());
             const linksToRemove = [];
             diagram.links.each((link) => {
-                const callKey = `${link.data.from}-${link.data.to}`;
-                if (!yCalls.has(callKey)) { linksToRemove.push(link.data); }
+                const from = String(link.data.from);
+                const to = String(link.data.to);
+                const callKey = `${from}-${to}`;
+                if (!yCalls.has(callKey)) {
+                    linksToRemove.push(link.data);
+                } else if (link.data.from !== from || link.data.to !== to) {
+                    // Coerce so GoJS resolves endpoints to string-keyed nodes.
+                    diagram.model.setDataProperty(link.data, 'from', from);
+                    diagram.model.setDataProperty(link.data, 'to', to);
+                    changed = true;
+                }
             });
             for (const linkData of linksToRemove) {
                 diagram.model.removeLinkData(linkData);
@@ -601,7 +610,10 @@ export function setupDiagram(
         } finally {
             reconciling = false;
         }
-        if (changed) { updateUnconnectedNodesLayout(diagram); }
+        if (changed) {
+            updateUnconnectedNodesLayout(diagram);
+            scheduleRelayoutDigraph(diagram);
+        }
     }
     model.addListener('synced', () => { scheduleReconcile(); });
     model.addModelDataListener('authors', (_, newValue) => {
@@ -706,6 +718,11 @@ export function setupDiagram(
     });
     model.addFuncCallListener((action, oldFrom, oldTo, newFrom, newTo) => {
         let changed = false;
+        // GoJS node keys are strings; coerce so link endpoints always resolve.
+        if (oldFrom != null) { oldFrom = String(oldFrom); }
+        if (oldTo != null) { oldTo = String(oldTo); }
+        if (newFrom != null && action !== 'problems') { newFrom = String(newFrom); }
+        if (newTo != null) { newTo = String(newTo); }
         if (action === 'add') {
             if (diagram.findLinksByExample({ from: newFrom, to: newTo }).count === 0) {
                 diagram.model.addLinkData({ from: newFrom, to: newTo });
@@ -734,7 +751,12 @@ export function setupDiagram(
                 scheduleReconcile();
             }
         }
-        if (changed) { updateUnconnectedNodesLayout(diagram); }
+        if (changed) {
+            updateUnconnectedNodesLayout(diagram);
+            if (action === 'add' || action === 'update') {
+                scheduleRelayoutDigraph(diagram);
+            }
+        }
         if (action === 'add' || action === 'delete' || action === 'update') {
             scheduleReconcile();
         }

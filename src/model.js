@@ -146,6 +146,9 @@ export class Model {
     importModel(data) {
         for (const key of this.functions.keys()) { this.#fireFuncRemoveListeners(key); }
         this.#suppressObservers = true;
+        // Rebuild indexes from the Yjs observer during the transaction below.
+        this.calledFunctions = {};
+        this.callingFunctions = {};
         this.model.transact(() => {
             this.modelData.clear();
             this.functions.clear();
@@ -165,7 +168,7 @@ export class Model {
                 this.functions.set(key, this.convertFuncData(func));
             }
 
-            // import calls
+            // import calls — keys are always strings (matches function keys / #addCall)
             for (const {from, to} of (data.calls || [])) {
                 const callKey = `${from}-${to}`;
                 this.calls.set(callKey, true);
@@ -174,7 +177,12 @@ export class Model {
         this.#suppressObservers = false;
         this.fireModelDataListeners();
         for (const key of this.functions.keys()) { this.#fireFuncAddListeners(key); }
-        for (const {from, to} of (data.calls || [])) { this.#fireCallListeners('add', null, null, from, to); }
+        // Coerce from/to to strings: JSON often has numeric keys, but GoJS node keys
+        // are strings (func.key.toString()). Numeric link endpoints never resolve,
+        // so calls stay invisible until a full reload rebuilds links via #addCall.
+        for (const {from, to} of (data.calls || [])) {
+            this.#fireCallListeners('add', null, null, String(from), String(to));
+        }
     }
 
     /**
