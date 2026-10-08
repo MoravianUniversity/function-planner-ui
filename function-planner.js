@@ -167,6 +167,8 @@ export default function init(
     const model = new Model(planId, options.initialModel, {
         ydoc: options.ydoc,
         useIndexedDB: options.useIndexedDB,
+        // Base-plan admin editors must not persist templateFunctionKeys into template JSON.
+        freezeTemplateFunctionKeys: options.freezeTemplateFunctionKeys ?? !options.adminMode,
     });
     const diagram = setupDiagram(rootElem, model, options);
     makeAllButtons(diagram, model, options);

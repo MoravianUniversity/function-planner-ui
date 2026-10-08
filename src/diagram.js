@@ -199,8 +199,9 @@ export function setupDiagram(
         go.Diagram.licenseKey = options.licenseKey;
     }
     const globalReadonly = Boolean(options.readonly) && !options.adminMode;
-    function effectiveNodeReadOnly(name) {
+    function effectiveNodeReadOnly(name, key) {
         if (options.adminMode) { return false; }
+        if (!model.isTemplateFunctionKey(key)) { return false; }
         return resolveFunctionReadOnly(name?.toString() ?? '', options.functionReadOnly);
     }
     const paddingHoriz = 75, paddingVert = 30;
@@ -309,7 +310,9 @@ export function setupDiagram(
     .bind('isLayoutPositioned', 'layerName', (ln) => ln !== 'Unconnected')
     .bind('movable', 'readOnly', (ro) => !globalReadonly && !ro)
     .theme('shadowColor', 'shadow')
-    .bind('deletable', 'readOnly', (ro) => !ro); // if any property is readOnly, the node is not deletable
+    // Name-keyed PlanConfig rules: any matching read-only policy must block delete
+    // so the template function cannot be removed while the rule still applies.
+    .bind('deletable', 'readOnly', (ro) => !ro);
     if (SHOW_COLLAPSE_BUTTON) {
         diagram.nodeTemplate.add(go.GraphObject.build('TreeExpanderButton', {
             alignment: go.Spot.Bottom,
@@ -549,7 +552,7 @@ export function setupDiagram(
                         const parsed = Number.parseInt(key, 10);
                         data.sequence = Number.isFinite(parsed) ? parsed : Date.now();
                     }
-                    const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name) };
+                    const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name, key) };
                     diagram.model.addNodeData(nodeData);
                     node = diagram.findNodeForKey(key);
                     node.layerName = getLayerName(node);
@@ -569,7 +572,7 @@ export function setupDiagram(
                         if (!deepEquals(node.data[prop], next)) {
                             diagram.model.setDataProperty(node.data, prop, next);
                             if (prop === 'name') {
-                                diagram.model.setDataProperty(node.data, 'readOnly', effectiveNodeReadOnly(next));
+                                diagram.model.setDataProperty(node.data, 'readOnly', effectiveNodeReadOnly(next, key));
                             }
                             changed = true;
                         }
@@ -627,7 +630,7 @@ export function setupDiagram(
             if (local) { model.updateFunc(key, 'sequence', data.sequence); }
         }
         // PlanConfig owns per-function readOnly; ignore any value from the collaborative model.
-        const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name) };
+        const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name, key) };
         diagram.model.addNodeData(nodeData);
         const node = diagram.findNodeForKey(key);
         node.layerName = getLayerName(node);
@@ -681,7 +684,7 @@ export function setupDiagram(
                 // name has issues if set to empty string
                 if (newValue === '') { newValue = 'function'; }
                 diagram.model.setDataProperty(node.data, property, newValue);
-                diagram.model.setDataProperty(node.data, 'readOnly', effectiveNodeReadOnly(newValue));
+                diagram.model.setDataProperty(node.data, 'readOnly', effectiveNodeReadOnly(newValue, key));
                 changed = true;
             } else if (property === 'owner' && options.canClaimFuncs) {
                 newValue = newValue?.toString()?.trim();

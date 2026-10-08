@@ -35,6 +35,8 @@ const FUNC_DATA_ARRAYS = ['params', 'returns'];
 export class Model {
     #suppressObservers = false;
     #ownsDoc = false;
+    /** @type {boolean} */
+    #freezeTemplateFunctionKeys = true;
 
     /**
      * @param {string} id
@@ -42,11 +44,13 @@ export class Model {
      * @param {object} [modelOptions]
      * @param {Y.Doc} [modelOptions.ydoc] External Y.Doc (e.g. shared with WebsocketProvider). When set, IndexedDB is off unless useIndexedDB is forced on.
      * @param {boolean} [modelOptions.useIndexedDB=true] Local IndexedDB persistence (demos). Use false when the server is source of truth.
+     * @param {boolean} [modelOptions.freezeTemplateFunctionKeys=true] When true, freeze base-plan function keys at seed for PlanConfig read-only gating. Off for base-plan admin editors so keys are not written into template JSON.
      */
     constructor(id, initialData={}, modelOptions={}) {
         this.synced = false;
         this.id = id;
         this.initialData = initialData;
+        this.#freezeTemplateFunctionKeys = modelOptions.freezeTemplateFunctionKeys ?? true;
         const useIndexedDB = modelOptions.useIndexedDB ?? !modelOptions.ydoc;
         if (modelOptions.ydoc) {
             this.model = modelOptions.ydoc;
@@ -97,7 +101,9 @@ export class Model {
             return;
         }
         if (this.functions.size === 0 && this.calls.size === 0) {
-            this.importModel(this.initialData);
+            this.importModel(this.initialData, { asTemplateSeed: true });
+        } else {
+            this.ensureTemplateFunctionKeys();
         }
         console.log(`Model ${this.id} synced${meta.source ? ` (${meta.source})` : ''}, current state:`, this.exportModel());
         const authors = this.modelData.get('authors');
@@ -106,6 +112,74 @@ export class Model {
         }
         this.synced = true;
         this.#fireListeners(this.#listeners['synced']);
+    }
+
+    /**
+     * Keys of functions that originated from the base-plan template (frozen at seed).
+     * @returns {string[]|null} null when not tracked / not yet set
+     */
+    getTemplateFunctionKeys() {
+        if (!this.modelData.has('templateFunctionKeys')) {
+            return null;
+        }
+        const raw = this.modelData.get('templateFunctionKeys');
+        const arr = raw?.toJSON ? raw.toJSON() : raw;
+        if (!Array.isArray(arr)) {
+            return [];
+        }
+        return arr.map((k) => k?.toString?.() ?? String(k));
+    }
+
+    /**
+     * Whether PlanConfig function read-only rules may apply to this function key.
+     * When template keys are not frozen (base-plan editor), returns true.
+     * When frozen but not yet set, returns false (avoid locking student-created funcs).
+     * @param {string|number} key
+     * @returns {boolean}
+     */
+    isTemplateFunctionKey(key) {
+        if (!this.#freezeTemplateFunctionKeys) {
+            return true;
+        }
+        const keys = this.getTemplateFunctionKeys();
+        if (keys == null) {
+            return false;
+        }
+        return keys.includes(key?.toString?.() ?? String(key));
+    }
+
+    /**
+     * Ensure `modelData.templateFunctionKeys` is set when freezing is enabled.
+     * @param {{ asTemplateSeed?: boolean }} [opts]
+     */
+    ensureTemplateFunctionKeys(opts={}) {
+        if (!this.#freezeTemplateFunctionKeys) {
+            return;
+        }
+        if (opts.asTemplateSeed) {
+            this.#setTemplateFunctionKeys(Array.from(this.functions.keys()));
+            return;
+        }
+        if (this.modelData.has('templateFunctionKeys')) {
+            return;
+        }
+        this.#migrateTemplateFunctionKeys();
+    }
+
+    #setTemplateFunctionKeys(keys) {
+        const normalized = (keys || []).map((k) => k?.toString?.() ?? String(k));
+        this.modelData.set('templateFunctionKeys', normalized);
+    }
+
+    /** Best-effort: keys present in both the doc and initialData (current base content). */
+    #migrateTemplateFunctionKeys() {
+        const initialKeys = new Set(
+            (this.initialData?.functions || [])
+                .map((f) => f?.key?.toString?.())
+                .filter(Boolean)
+        );
+        const keys = Array.from(this.functions.keys()).filter((k) => initialKeys.has(k));
+        this.#setTemplateFunctionKeys(keys);
     }
 
     /** Tear down IndexedDB provider; destroys the Y.Doc only if this Model created it. */
@@ -142,8 +216,9 @@ export class Model {
     /**
      * Import model data from a plain JSON object.
      * @param {object} data imported model data
+     * @param {{ asTemplateSeed?: boolean }} [opts] When asTemplateSeed, freeze imported function keys as template keys.
      */
-    importModel(data) {
+    importModel(data, opts={}) {
         for (const key of this.functions.keys()) { this.#fireFuncRemoveListeners(key); }
         this.#suppressObservers = true;
         // Rebuild indexes from the Yjs observer during the transaction below.
@@ -173,6 +248,14 @@ export class Model {
                 const callKey = `${from}-${to}`;
                 this.calls.set(callKey, true);
             }
+
+            if (this.#freezeTemplateFunctionKeys) {
+                if (opts.asTemplateSeed) {
+                    this.#setTemplateFunctionKeys(Array.from(this.functions.keys()));
+                } else if (!this.modelData.has('templateFunctionKeys')) {
+                    this.#migrateTemplateFunctionKeys();
+                }
+            }
         });
         this.#suppressObservers = false;
         this.fireModelDataListeners();
@@ -189,7 +272,7 @@ export class Model {
      * Reset the model to the initial data.
      */
     resetModel() {
-        this.importModel(this.initialData);
+        this.importModel(this.initialData, { asTemplateSeed: true });
     }
 
     #listeners = {};
@@ -347,8 +430,18 @@ export class Model {
     //    testDocumentation (Y.Text)
     //    globalCode (Y.Text)
     //    testGlobalCode (Y.Text)
-    // Show/readOnly policies live in PlanConfig options (not model data).
+    //    templateFunctionKeys (string[]) — keys seeded from the base plan; used to gate PlanConfig functionReadOnly
+    // Show/readOnly policies live in PlanConfig options (not model data), except templateFunctionKeys provenance.
     updateModelData(property, value, cursorPos=null) {
+        // Students must not rewrite template provenance via normal modelData updates.
+        // Imports set #suppressObservers and may restore templateFunctionKeys from JSON.
+        if (
+            property === 'templateFunctionKeys' &&
+            this.#freezeTemplateFunctionKeys &&
+            !this.#suppressObservers
+        ) {
+            return;
+        }
         if (MODEL_DATA_TEXTS.includes(property)) {
             updateText(this.modelData, property, value, cursorPos);
         } else if (MODEL_DATA_ARRAYS.includes(property)) {

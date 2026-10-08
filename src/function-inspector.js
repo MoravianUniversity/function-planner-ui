@@ -35,6 +35,7 @@ export function makeFunctionInspector(model, options) {
     }
     function effectiveReadOnly() {
         if (options.adminMode) { return false; }
+        if (!model.isTemplateFunctionKey(key)) { return false; }
         const name = model.functions.get(key)?.get('name')?.toString() ?? '';
         return resolveFunctionReadOnly(name, options.functionReadOnly);
     }
