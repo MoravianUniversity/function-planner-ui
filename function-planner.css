@@ -385,6 +385,16 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
 
     textarea { width: 100%; min-height: 3.75em; resize: vertical; }
     input:read-only, textarea:read-only, select:disabled { background-color: transparent; border: 1px solid transparent; }
+    input[type="checkbox"]:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        accent-color: var(--button-text-disabled-color);
+        filter: grayscale(1);
+    }
+    label:has(> input[type="checkbox"]:disabled) {
+        color: var(--placeholder-color);
+        cursor: not-allowed;
+    }
 
     /*:invalid, :user-invalid { background-color: rgb(from var(--error-color) r g b / 0.2) !important; border: 1px solid var(--error-color) !important; }*/
     input, textarea, select { border: 1px solid var(--insp-var-input-border-color); background-color: var(--tool-background-color); color: var(--text-color); }
@@ -671,6 +681,16 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
 .func-planner.func-planner--readonly .inspector button:not(.inspector-resize) {
     pointer-events: none;
     opacity: 0.85;
+}
+.func-planner.func-planner--readonly .inspector input[type="checkbox"] {
+    opacity: 0.45;
+    cursor: not-allowed;
+    accent-color: var(--button-text-disabled-color);
+    filter: grayscale(1);
+}
+.func-planner.func-planner--readonly .inspector label:has(> input[type="checkbox"]) {
+    color: var(--placeholder-color);
+    cursor: not-allowed;
 }
 
 /* Extra host-app FABs — same absolute FAB treatment as settings/theme */
