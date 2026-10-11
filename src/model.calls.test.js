@@ -129,6 +129,28 @@ describe('Model #callObserver', () => {
         expect(model.calledFunctions['2'] || []).toEqual([]);
     });
 
+    it('removeFunc deletes incident calls and notifies listeners before funcRemove', () => {
+        model.addFunc({ name: 'a' });
+        model.addFunc({ name: 'b' });
+        model.addFuncCall('0', '1');
+        model.addFuncCall('1', '0');
+        const events = callEvents(model);
+        const removed = [];
+        model.addFuncRemoveListener((key) => { removed.push(key); });
+
+        model.removeFunc('0');
+
+        expect(events).toEqual([
+            { action: 'delete', oldFrom: '0', oldTo: '1', newFrom: null, newTo: null },
+            { action: 'delete', oldFrom: '1', oldTo: '0', newFrom: null, newTo: null },
+        ]);
+        expect(removed).toEqual(['0']);
+        expect(model.calls.has('0-1')).toBe(false);
+        expect(model.calls.has('1-0')).toBe(false);
+        expect(model.functions.has('0')).toBe(false);
+        expect(model.functions.has('1')).toBe(true);
+    });
+
     it('does not mis-pair delete A-B with add of reversed B-A when a third edge also changes', () => {
         model.addFuncCall('0', '1');
         model.addFuncCall('2', '3');
