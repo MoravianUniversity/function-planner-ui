@@ -5,7 +5,7 @@
 import Sortable from 'sortablejs';
 import Swal from 'sweetalert2';
 
-import { wrapWithLabel, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly, isParamStructureReadOnly, isReturnStructureReadOnly, isParamFacetReadOnly, isReturnFacetReadOnly } from './inspector.js';
+import { wrapWithLabel, wrapAsDocstring, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly, isParamStructureReadOnly, isReturnStructureReadOnly, isParamFacetReadOnly, isReturnFacetReadOnly } from './inspector.js';
 import { loadSVG, makeOption, makeAddButton, makeRemoveButton, setTextInputValue } from './utils.js';
 import { authorLabel } from './authors.js';
 import { toEnglishType } from './type-utils.js';
@@ -125,7 +125,7 @@ function createValidIdentifier(name) {
     return name.trim().replace(/[^a-zA-Z0-9_]/g, '_');
 }
 function makeFuncDesc(funcs) {
-    return makeTextarea('desc', funcs, {placeholder: 'Description', required: true});
+    return wrapAsDocstring(makeTextarea('desc', funcs, {placeholder: 'Description', required: true}));
 }
 function makeIOSelect(funcs) {
     const select = document.createElement('select');

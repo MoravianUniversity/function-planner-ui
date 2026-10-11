@@ -383,6 +383,47 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
         text-wrap: nowrap;
     }
 
+    .func-docstring {
+        border: 1px solid var(--insp-var-input-border-color);
+        background-color: var(--tool-background-color);
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 0.9em;
+    }
+    .func-docstring::before,
+    .func-docstring::after {
+        content: '"""';
+        display: block;
+        color: #6A9955;
+        line-height: 0.6;
+        padding-top: 0.4em;
+    }
+    .func-docstring textarea,
+    .func-docstring textarea.warning,
+    .func-docstring textarea.error,
+    .func-docstring textarea:read-only {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        border: none !important;
+        border-radius: 0;
+        background: transparent !important;
+        font-family: inherit;
+        font-size: inherit;
+        outline: none;
+    }
+    .func-docstring:has(textarea.warning) {
+        border-color: var(--warning-color);
+        background-color: rgb(from var(--warning-color) r g b / 0.2);
+    }
+    .func-docstring:has(textarea.error) {
+        border-color: var(--error-color);
+        background-color: rgb(from var(--error-color) r g b / 0.2);
+    }
+    .func-docstring:has(textarea:read-only) {
+        border-color: transparent;
+        background-color: transparent;
+    }
+
     textarea { width: 100%; min-height: 3.75em; resize: vertical; }
     input:read-only, textarea:read-only, select:disabled { background-color: transparent; border: 1px solid transparent; }
     input[type="checkbox"]:disabled {
@@ -609,7 +650,7 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
 }
 
 .func-planner .inspector .is-main {
-    .func-desc { display: none; }
+    .func-docstring:has(.func-desc) { display: none; }
     .func-params { display: none; }
     .func-returns { display: none; }
 }

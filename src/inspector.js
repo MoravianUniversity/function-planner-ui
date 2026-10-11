@@ -130,6 +130,18 @@ export function wrapWithLabel(elem, text) {
 }
 
 /**
+ * Wraps a documentation textarea so CSS can show auto-added """ markers.
+ * @param {HTMLElement} elem
+ * @returns {HTMLElement} the wrapper element
+ */
+export function wrapAsDocstring(elem) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'func-docstring';
+    wrapper.append(elem);
+    return wrapper;
+}
+
+/**
  * Creates a checkbox for a particular field in the data.
  * @param {string} field 
  * @param {{set: function, listen: function, listenRO: function}} funcs

@@ -3,7 +3,7 @@
  * when no function is selected.
  */
 
-import { wrapWithLabel, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly } from './inspector.js';
+import { wrapWithLabel, wrapAsDocstring, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly } from './inspector.js';
 import { DEFAULT_PROGRAM_HEADER } from './save-load.js';
 import { makeAddButton, makeRemoveButton } from './utils.js';
 import { authorLabel } from './authors.js';
@@ -51,8 +51,8 @@ function makeHeader(model) {
 }
 
 function makeModuleDesc(funcs) {
-    return makeTextarea('documentation', funcs,
-        {placeholder: DEFAULT_PROGRAM_HEADER, required: true});
+    return wrapAsDocstring(makeTextarea('documentation', funcs,
+        {placeholder: DEFAULT_PROGRAM_HEADER, required: true}));
 }
 
 function makeAuthorNames(model, options, funcs) {
