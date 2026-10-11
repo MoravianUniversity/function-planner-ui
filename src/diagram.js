@@ -200,6 +200,8 @@ export function setupDiagram(
     let reversingLink = false;
     let resequencing = false;
     let reconciling = false;
+    /** True while applying Yjs→GoJS updates so ModelChanged does not echo back into Yjs (pollutes undo). */
+    let applyingFromYjs = false;
     let reconcileTimer = null;
 
     if (options.licenseKey) {
@@ -481,7 +483,7 @@ export function setupDiagram(
     diagram.addModelChangedListener((evt) => {
         // When the UndoManager is enabled, the CommittedTransaction event has an evt.object that is the transaction
         // However, when disabled, the CommittedTransaction event has evt.object===null so we must check each event change instead
-        if (reversingLink || reconciling) { return; }
+        if (reversingLink || reconciling || applyingFromYjs) { return; }
         if (diagram.undoManager.isEnabled) {
             if (!evt.isTransactionFinished) { return; }
             if (evt.object == null || (evt.object.name !== "Linking" && evt.object.name !== "Relinking")) { return; }
@@ -638,30 +640,40 @@ export function setupDiagram(
         }
         // PlanConfig owns per-function readOnly; ignore any value from the collaborative model.
         const nodeData = { ...data, key, readOnly: effectiveNodeReadOnly(data.name, key) };
-        diagram.model.addNodeData(nodeData);
-        const node = diagram.findNodeForKey(key);
-        node.layerName = getLayerName(node);
-        if (node.layerName === 'Unconnected') {
-            nodeIsBecomingUnconnected(node);
-        } else {
-            nodeIsBecomingConnected(node);
-        }
-        if (options.canClaimFuncs && data.owner) {
-            setGroup(diagram.findNodeForKey(key), data.owner);
-        }
-        // Only the client that added the function should select/open it.
-        if (model.synced && local) {
-            diagram.select(diagram.findNodeForKey(key));
+        applyingFromYjs = true;
+        try {
+            diagram.model.addNodeData(nodeData);
+            const node = diagram.findNodeForKey(key);
+            node.layerName = getLayerName(node);
+            if (node.layerName === 'Unconnected') {
+                nodeIsBecomingUnconnected(node);
+            } else {
+                nodeIsBecomingConnected(node);
+            }
+            if (options.canClaimFuncs && data.owner) {
+                setGroup(diagram.findNodeForKey(key), data.owner);
+            }
+            // Only the client that added the function should select/open it.
+            if (model.synced && local) {
+                diagram.select(diagram.findNodeForKey(key));
+            }
+        } finally {
+            applyingFromYjs = false;
         }
         updateUnconnectedNodesLayout(diagram);
         scheduleReconcile();
     });
     model.addFuncRemoveListener((key) => {
-        const node = diagram.findNodeForKey(key);
-        if (node) {
-            if (diagram.selection.contains(node)) { diagram.clearSelection(); }
-            maybeRemoveGroup(node);
-            diagram.model.removeNodeData(node.data);
+        applyingFromYjs = true;
+        try {
+            const node = diagram.findNodeForKey(key);
+            if (node) {
+                if (diagram.selection.contains(node)) { diagram.clearSelection(); }
+                maybeRemoveGroup(node);
+                diagram.model.removeNodeData(node.data);
+            }
+        } finally {
+            applyingFromYjs = false;
         }
         updateInterNodeProblems(model, options);
         updateUnconnectedNodesLayout(diagram);
@@ -733,33 +745,38 @@ export function setupDiagram(
         if (oldTo != null) { oldTo = String(oldTo); }
         if (newFrom != null && action !== 'problems') { newFrom = String(newFrom); }
         if (newTo != null) { newTo = String(newTo); }
-        if (action === 'add') {
-            if (diagram.findLinksByExample({ from: newFrom, to: newTo }).count === 0) {
-                diagram.model.addLinkData({ from: newFrom, to: newTo });
-                changed = true;
+        applyingFromYjs = true;
+        try {
+            if (action === 'add') {
+                if (diagram.findLinksByExample({ from: newFrom, to: newTo }).count === 0) {
+                    diagram.model.addLinkData({ from: newFrom, to: newTo });
+                    changed = true;
+                }
+            } else if (action === 'problems') {
+                const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
+                if (link) {
+                    diagram.model.setDataProperty(link.data, 'problems', [...newFrom]);
+                }
+            } else if (action === 'delete') {
+                const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
+                if (link) {
+                    diagram.model.removeLinkData(link.data);
+                    changed = true;
+                } else {
+                    // Link missing or endpoints diverged — reconcile will drop ghosts.
+                    scheduleReconcile();
+                }
+            } else if (action === 'update') {
+                const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
+                if (link) {
+                    if (newFrom !== oldFrom) { diagram.model.setDataProperty(link.data, 'from', newFrom); changed = true; }
+                    if (newTo !== oldTo) { diagram.model.setDataProperty(link.data, 'to', newTo); changed = true; }
+                } else {
+                    scheduleReconcile();
+                }
             }
-        } else if (action === 'problems') {
-            const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
-            if (link) {
-                diagram.model.setDataProperty(link.data, 'problems', [...newFrom]);
-            }
-        } else if (action === 'delete') {
-            const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
-            if (link) {
-                diagram.model.removeLinkData(link.data);
-                changed = true;
-            } else {
-                // Link missing or endpoints diverged — reconcile will drop ghosts.
-                scheduleReconcile();
-            }
-        } else if (action === 'update') {
-            const link = diagram.findLinksByExample({ from: oldFrom, to: oldTo }).first();
-            if (link) {
-                if (newFrom !== oldFrom) { diagram.model.setDataProperty(link.data, 'from', newFrom); changed = true; }
-                if (newTo !== oldTo) { diagram.model.setDataProperty(link.data, 'to', newTo); changed = true; }
-            } else {
-                scheduleReconcile();
-            }
+        } finally {
+            applyingFromYjs = false;
         }
         if (changed) {
             updateUnconnectedNodesLayout(diagram);

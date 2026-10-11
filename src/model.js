@@ -72,12 +72,9 @@ export class Model {
         this.calls = this.model.getMap('calls');
         this.calls.observe((event) => { this.#callObserver(event); });
 
-        const untrackedOrigins = new Set();
-
         // setup persistence — skip when collaborating against a server-backed doc
         if (useIndexedDB) {
             this.indexeddb = new IndexeddbPersistence(this.id, this.model);
-            untrackedOrigins.add(this.indexeddb);
             this.indexeddb.on('synced', () => {
                 this.markSynced({ source: 'indexeddb' });
             });
@@ -86,9 +83,8 @@ export class Model {
         }
 
         // setup undo/redo after initial data is loaded
-        this.undoManager = new Y.UndoManager([this.modelData, this.functions, this.calls], {
-            untrackedOrigins
-        });
+        // (Yjs has no untrackedOrigins; seed/sync pollution is cleared in markSynced)
+        this.undoManager = new Y.UndoManager([this.modelData, this.functions, this.calls]);
     }
 
     /**
@@ -110,6 +106,8 @@ export class Model {
         if (typeof authors === 'string' || authors instanceof Y.Text) {
             this.updateModelData('authors', authors);
         }
+        // Drop seed/import/IndexedDB ops so undo starts clean for user edits.
+        this.undoManager.clear();
         this.synced = true;
         this.#fireListeners(this.#listeners['synced']);
     }
@@ -956,7 +954,11 @@ export class Model {
      * @param {string} to key of the to function
      */
     addFuncCall(from, to) {
-        this.calls.set(`${from}-${to}`, true);
+        const key = `${from}-${to}`;
+        // Idempotent: re-set would re-own a remote key onto the local undo stack.
+        if (this.calls.has(key)) { return; }
+        this.calls.set(key, true);
+        this.undoManager.stopCapturing();
     }
 
     /**
@@ -965,7 +967,10 @@ export class Model {
      * @param {string} to key of the to function
      */
     removeFuncCall(from, to) {
-        this.calls.delete(`${from}-${to}`);
+        const key = `${from}-${to}`;
+        if (!this.calls.has(key)) { return; }
+        this.calls.delete(key);
+        this.undoManager.stopCapturing();
     }
 
     /**
@@ -973,11 +978,16 @@ export class Model {
      * @param {array} callArray array of {from, to} objects for the calls to remove
      */
     removeFuncCalls(callArray) {
+        let removed = false;
         this.model.transact(() => {
             for (const {from, to} of callArray) {
-                this.calls.delete(`${from}-${to}`);
+                const key = `${from}-${to}`;
+                if (!this.calls.has(key)) { continue; }
+                this.calls.delete(key);
+                removed = true;
             }
         });
+        if (removed) { this.undoManager.stopCapturing(); }
     }
 
     /**
@@ -991,10 +1001,14 @@ export class Model {
         newFrom = newFrom ?? oldFrom;
         newTo = newTo ?? oldTo;
         if (newFrom === oldFrom && newTo === oldTo) { return; }
+        const oldKey = `${oldFrom}-${oldTo}`;
+        const newKey = `${newFrom}-${newTo}`;
+        if (!this.calls.has(oldKey) && this.calls.has(newKey)) { return; }
         this.model.transact(() => {
-            this.calls.delete(`${oldFrom}-${oldTo}`);
-            this.calls.set(`${newFrom}-${newTo}`, true);
+            if (this.calls.has(oldKey)) { this.calls.delete(oldKey); }
+            if (!this.calls.has(newKey)) { this.calls.set(newKey, true); }
         });
+        this.undoManager.stopCapturing();
     }
 
     /**
