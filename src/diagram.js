@@ -171,7 +171,14 @@ function sequenceValue(data) {
 }
 
 function createDigraphLayout() {
-    return new OrderedLayeredDigraphLayout({ direction: 90, layerSpacing: 50, columnSpacing: 30 });
+    return new OrderedLayeredDigraphLayout({
+        direction: 90,
+        layerSpacing: 50,
+        columnSpacing: 30,
+        // null/true re-layouts mid-transaction and snaps a dragged node back to its
+        // sequence slot (often on the first drag, when measure invalidates layout).
+        isRealtime: false,
+    });
 }
 
 /**
@@ -765,26 +772,37 @@ export function setupDiagram(
         }
     });
     diagram.addDiagramListener('LayoutCompleted', () => { updateUnconnectedNodesLayout(diagram); });
-    diagram.addDiagramListener('SelectionMoved', () => {
-        if (globalReadonly || resequencing) { return; }
-        const node = diagram.selection.first();
-        if (!(node instanceof go.Node) || node.data?.isGroup || node.data?.readOnly) { return; }
-        if (node.layerName === 'Unconnected') { return; }
 
+    /** Keys whose GoJS `sequence` changed during a drag and still need Yjs persist. */
+    const dragSequenceDirty = new Set();
+    /** Animation was enabled before the current reorder drag. */
+    let dragAnimWasEnabled = null;
+
+    function siblingSequenceNumber(n) {
+        if (n.data.sequence != null) return n.data.sequence;
+        const parsed = Number.parseInt(n.data.key, 10);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    /**
+     * Reassign sibling `sequence` values from current left-to-right locations.
+     * @param {go.Node} node
+     * @param {{ persist: boolean, onlyIfOrderChanged?: boolean }} opts
+     * @returns {boolean} whether sibling order (and thus layout) needs updating
+     */
+    function assignSiblingSequencesByX(node, { persist, onlyIfOrderChanged = false }) {
         const siblings = findSiblingNodes(node);
         if (siblings.length < 2) {
-            relayoutDigraph(diagram);
-            return;
+            if (persist) { dragSequenceDirty.clear(); }
+            return false;
         }
 
         const ordered = [...siblings].sort((a, b) => a.location.x - b.location.x);
-        const seqValues = siblings
-            .map(n => {
-                if (n.data.sequence != null) return n.data.sequence;
-                const parsed = Number.parseInt(n.data.key, 10);
-                return Number.isFinite(parsed) ? parsed : 0;
-            })
-            .sort((a, b) => a - b);
+        const bySeq = [...siblings].sort((a, b) => siblingSequenceNumber(a) - siblingSequenceNumber(b));
+        const orderChanged = ordered.some((n, i) => n.data.key !== bySeq[i].data.key);
+        if (onlyIfOrderChanged && !orderChanged) { return false; }
+
+        const seqValues = siblings.map(siblingSequenceNumber).sort((a, b) => a - b);
 
         resequencing = true;
         try {
@@ -792,12 +810,87 @@ export function setupDiagram(
                 const seq = seqValues[i];
                 if (n.data.sequence !== seq) {
                     diagram.model.setDataProperty(n.data, 'sequence', seq);
-                    model.updateFunc(n.data.key, 'sequence', seq);
+                    dragSequenceDirty.add(n.data.key);
                 }
             });
+            if (persist) {
+                for (const key of dragSequenceDirty) {
+                    const n = diagram.findNodeForKey(key);
+                    if (n && n.data.sequence != null) {
+                        model.updateFunc(key, 'sequence', n.data.sequence);
+                    }
+                }
+                dragSequenceDirty.clear();
+            }
         } finally {
             resequencing = false;
         }
+        return orderChanged;
+    }
+
+    function connectedMovableSelection() {
+        if (globalReadonly || resequencing) { return null; }
+        const node = diagram.selection.first();
+        if (!(node instanceof go.Node) || node.data?.isGroup || node.data?.readOnly) { return null; }
+        if (node.layerName === 'Unconnected') { return null; }
+        return node;
+    }
+
+    function beginReorderDrag() {
+        if (dragAnimWasEnabled !== null) { return; }
+        dragAnimWasEnabled = diagram.animationManager.isEnabled;
+        // Layout animation was overwriting the drag position every frame.
+        diagram.animationManager.stopAnimation(true);
+        diagram.animationManager.isEnabled = false;
+    }
+
+    function endReorderDrag() {
+        if (dragAnimWasEnabled === null) { return; }
+        diagram.animationManager.isEnabled = dragAnimWasEnabled;
+        dragAnimWasEnabled = null;
+    }
+
+    // Live-reorder siblings while dragging. Keep the dragged node in layout (so space
+    // is reserved) but disable animation and re-pin it to the pointer after relayout.
+    const draggingTool = diagram.toolManager.draggingTool;
+    const origDoActivate = draggingTool.doActivate;
+    draggingTool.doActivate = function() {
+        dragSequenceDirty.clear();
+        origDoActivate.call(this);
+        const node = connectedMovableSelection();
+        if (node && this.draggedParts?.has(node)) {
+            beginReorderDrag();
+            diagram.currentCursor = 'ew-resize';
+        }
+    };
+    const origDoDeactivate = draggingTool.doDeactivate;
+    draggingTool.doDeactivate = function() {
+        // Cancelled drags roll back the transaction (including in-drag sequence edits).
+        dragSequenceDirty.clear();
+        endReorderDrag();
+        origDoDeactivate.call(this);
+    };
+    const origDoMouseMove = draggingTool.doMouseMove;
+    draggingTool.doMouseMove = function() {
+        origDoMouseMove.call(this);
+        if (!this.isActive) { return; }
+        const node = connectedMovableSelection();
+        if (!node || !this.draggedParts?.has(node)) { return; }
+        beginReorderDrag();
+        diagram.currentCursor = 'ew-resize';
+        // Relayout only when left/right order among siblings actually changes — not when
+        // we would merely materialize missing sequence numbers (that froze the first drag).
+        if (!assignSiblingSequencesByX(node, { persist: false, onlyIfOrderChanged: true })) { return; }
+        const keep = node.location.copy();
+        relayoutDigraph(diagram);
+        node.location = keep;
+    };
+
+    diagram.addDiagramListener('SelectionMoved', () => {
+        const node = connectedMovableSelection();
+        if (!node) { return; }
+        endReorderDrag();
+        assignSiblingSequencesByX(node, { persist: true });
         relayoutDigraph(diagram);
     });
 
