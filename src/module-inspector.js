@@ -181,8 +181,8 @@ function makeAuthorNames(model, options, funcs) {
 }
 
 function makeTestDocumentation(model, options, funcs) {
-    const textarea = makeTextarea('testDocumentation', funcs,
-            {placeholder: `Tests for the "${model.id}" module`});
+    const textarea = wrapAsDocstring(makeTextarea('testDocumentation', funcs,
+            {placeholder: `Tests for the "${model.id}" module`}));
     const label = wrapWithLabel(textarea, 'Test Documentation');
     if (!options.adminMode) {
         function toggleShowing() {
