@@ -55,12 +55,13 @@ function wrapText(text, {width=80, indent=4, firstLineIndent=indent}={}) {
     firstLineIndent = " ".repeat(firstLineIndent-1); // subtract 1 because we add a space before each word in the loop
     indent = " ".repeat(indent-1);
     return text.split("\n").map((para, i) => {
+        if (!para.trim()) { return ""; } // blank lines carry no indentation
         const lines = [];
         let curLine = i === 0 ? firstLineIndent : indent;
         para.trim().split(" ").forEach((word) => {
             if ((curLine + " " + word).length > width) {
                 lines.push(curLine);
-                curLine = indent + word;
+                curLine = indent + " " + word;
             } else {
                 curLine += " " + word;
             }
@@ -186,8 +187,8 @@ class NumpyDocstringFormatter extends DocstringFormatter {
 class GoogleDocstringFormatter extends DocstringFormatter {
     paramHeader = 'Args:\n';
     returnHeader = 'Returns:\n';
-    param(name, desc, type) { return wrapText(`${name}${type ? ` (${type})` : ""}: ${desc}`, {indent: 12, firstLineIndent: 8}); }
-    return(desc, type) { return wrapText(`${type ? `${type}: ` : ""}${desc}`, {indent: 12, firstLineIndent: 8}); }
+    param(name, desc, type) { return wrapText(`${name}${type ? ` (${type})` : ""}: ${desc}`, {indent: 12, firstLineIndent: 8}) + "\n"; }
+    return(desc, type) { return wrapText(`${type ? `${type}: ` : ""}${desc}`, {indent: 12, firstLineIndent: 8}) + "\n"; }
 }
 class SphinxDocstringFormatter extends DocstringFormatter {
     param(name, desc, type) { return wrapText48(`:param ${name}: ${desc}`) + "\n" + (type ? wrapText48(`:type ${name}: ${type}`) + "\n" : ""); }
