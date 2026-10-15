@@ -371,7 +371,7 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
 
     h2 { font-size: 1.4em; margin: 0; border-bottom: 2px solid var(--text-color); margin: 0; }
     h3 { font-size: 1.1em; margin-bottom: 0; }
-    
+
     input.func-name { font-family: inherit; font-size: 1em; border: 1px solid transparent; font-weight: bold; field-sizing: content; width: auto; max-width: calc(100% - 1em); text-overflow: ellipsis; }
     h2:has(input.func-name)::before, h2:has(input.func-name)::after { font-size: 1em; }
     /* h2:has(input.func-name)::before { content: 'def '; color:#C586C0; } */
@@ -550,7 +550,7 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
         input, select { margin: 0.1em 0; max-width: 100%; field-sizing: content; text-overflow: ellipsis; }
         .sortable-ghost { background-color: var(--insp-var-ghost-color); opacity: 0.8; }
         .sortable-drag { background-color: var(--insp-var-ghost-color); opacity: 0.6; }
-        
+
         .func-var-type-holder { white-space: nowrap; display: inline-block; max-width: 100%; }
         .func-var-type-edit {
             display: none;
@@ -701,6 +701,7 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
   font-size: 0.9em;
   overflow: auto;
   color: white;
+  ::selection { background: #667B8F; }
 }
 .code-box .token { margin: 0 !important; text-shadow: none !important; color: inherit !important; }
 .code-box .token.comment { color: #6A9955 !important; }
