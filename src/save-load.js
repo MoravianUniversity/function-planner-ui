@@ -177,26 +177,31 @@ class DocstringFormatter {
     returnHeader = '';
     param(name, desc, type) { return ''; }
     return(desc, type) { return ''; }
+    author(label) { return ''; }
 }
 class NumpyDocstringFormatter extends DocstringFormatter {
     paramHeader = 'Parameters\n    ----------\n';
     returnHeader = 'Returns\n    -------\n';
     param(name, desc, type) { return wrapText48(name + (type ? ` : ${type}` : "") + `\n${desc}\n`); }
     return(desc, type) { return wrapText48((type ? type : "object") + `\n${desc}\n`); }
+    author(label) { return `    Author\n    ------\n    ${label}\n`; }
 }
 class GoogleDocstringFormatter extends DocstringFormatter {
     paramHeader = 'Args:\n';
     returnHeader = 'Returns:\n';
     param(name, desc, type) { return wrapText(`${name}${type ? ` (${type})` : ""}: ${desc}`, {indent: 12, firstLineIndent: 8}) + "\n"; }
     return(desc, type) { return wrapText(`${type ? `${type}: ` : ""}${desc}`, {indent: 12, firstLineIndent: 8}) + "\n"; }
+    author(label) { return `    Author:\n        ${label}\n`; }
 }
 class SphinxDocstringFormatter extends DocstringFormatter {
     param(name, desc, type) { return wrapText48(`:param ${name}: ${desc}`) + "\n" + (type ? wrapText48(`:type ${name}: ${type}`) + "\n" : ""); }
     return(desc, type) { return wrapText48(`:return: ${desc}`) + "\n" + (type ? wrapText48(`:rtype: ${type}`) + "\n" : ""); }
+    author(label) { return wrapText48(`:author: ${label}`) + "\n"; }
 }
 class EpydocDocstringFormatter extends DocstringFormatter {
     param(name, desc, type) { return wrapText48(`@param ${name}: ${desc}`) + "\n" + (type ? wrapText48(`@type ${name}: ${type}`) + "\n" : ""); }
     return(desc, type) { return wrapText48(`@return: ${desc}`) + "\n" + (type ? wrapText48(`@rtype: ${type}`) + "\n" : ""); }
+    author(label) { return wrapText48(`@author: ${label}`) + "\n"; }
 }
 const DOCSTYLES = {
     "numpy": new NumpyDocstringFormatter(),
@@ -204,17 +209,22 @@ const DOCSTYLES = {
     "sphinx": new SphinxDocstringFormatter(),
     "epydoc": new EpydocDocstringFormatter(),
 }
-function pythonDocstring(desc, options, params, returns) {
-    let docstring = `    """\n${wrapText(desc)}\n\n`;
+function pythonDocstring(desc, options, params, returns, ownerLabel='') {
+    const descText = desc ? wrapText(desc) : '';
+    let docstring = `    """\n${descText}${descText ? '\n\n' : ''}`;
     const docStyle = (options.docStyle || "numpy").toLowerCase(); // default is numpy: easy to read and explicitly supports multiple returns
     if (!DOCSTYLES[docStyle]) { console.warn(`Unknown docstring style: ${docStyle}. Defaulting to numpy style.`); }
     const formatter = DOCSTYLES[docStyle] || DOCSTYLES["numpy"];
-    if (formatter.paramHeader && params.length > 0) { docstring += `    ${formatter.paramHeader}`; }
+    if (ownerLabel) { docstring += formatter.author(ownerLabel); }
+    if (formatter.paramHeader && params.length > 0) {
+        if (ownerLabel) { docstring += "\n"; }
+        docstring += `    ${formatter.paramHeader}`;
+    }
     for (const [i, param] of params.entries()) {
         docstring += formatter.param(param.name || letter(i), param.desc || "TODO", param.type);
     }
     if (formatter.returnHeader && returns.length > 0) {
-        if (params.length > 0) { docstring += "\n"; }
+        if (params.length > 0 || ownerLabel) { docstring += "\n"; }
         docstring += `    ${formatter.returnHeader}`;
     }
     for (const [i, ret] of returns.entries()) {
@@ -230,6 +240,21 @@ function authorString(authorIds, options={}) {
          (labels.length === 2) ? labels[0] + ' and ' + labels[1] :
          (labels.slice(0, -1).join(', ') + ', and ' + labels.slice(-1)[0])
 }
+/** Module basename matching the exporter download name (no .py), for an owner or shared/combined. */
+function exportModuleName(modelId, owner='') {
+    const suffix = owner ? `_${authorFilenameSuffix(owner)}` : '';
+    return toDownloadFilename(`${modelId}${suffix}`);
+}
+
+/**
+ * Normalize the export authors argument into a list of non-empty author ids.
+ * Empty string entries mean "include shared" and are not counted here.
+ */
+function normalizeAuthorIds(authors) {
+    return (Array.isArray(authors) ? authors : (typeof authors === 'string' ? [authors] : []))
+        .map(name => name.trim()).filter(name => name.length > 0);
+}
+
 // if authors is null, use all authors and don't split it up
 // if authors is provided, only include those authors in the export (array or string)
 // if authors is contains an empty string, include the unspecified author functions as well
@@ -238,9 +263,11 @@ function dealWithAuthors(model, authors, options={}) {
 
     const includeAll = authors == null;
     const includeUnspecified = authors === '' || (Array.isArray(authors) && authors.includes(''));
+    // Combined export, or an explicit multi-author list: include owner in function docstrings.
+    const showOwners = includeAll || (Array.isArray(authors) && normalizeAuthorIds(authors).length > 1);
     if (includeAll) { authors = modelAuthors; }
     // ensures that authors is always an array of trimmed non-empty strings, even if the input is a single string or null/undefined
-    authors = (Array.isArray(authors) ? authors : (typeof authors === 'string' ? [authors] : [])).map(name => name.trim()).filter(name => name.length > 0);
+    authors = normalizeAuthorIds(authors);
 
     const by = includeUnspecified ? authorString(modelAuthors, options) : authorString(authors, options);
 
@@ -249,7 +276,60 @@ function dealWithAuthors(model, authors, options={}) {
         return includeAll || (includeUnspecified && owner === '') || authors.includes(owner);
     });
 
-    return { by, functions };
+    return { by, functions, showOwners, includeAll };
+}
+
+/**
+ * Build `from module import f1, f2` lines for callees that live outside the exported set.
+ * Only used for split-file exports (authors != null).
+ */
+function crossFileImports(model, functions) {
+    const included = new Set(functions.map(([key]) => key));
+    /** @type {Map<string, Set<string>>} */
+    const byModule = new Map();
+
+    for (const [key] of functions) {
+        for (const calledKey of (model.calledFunctions[key] || [])) {
+            if (included.has(calledKey)) { continue; }
+            const callee = model.functions.get(calledKey);
+            if (!callee) { continue; }
+            const name = callee.get('name')?.toString() || `function${calledKey}`;
+            const owner = callee.get('owner')?.toString() || '';
+            const mod = exportModuleName(model.id, owner);
+            if (!byModule.has(mod)) { byModule.set(mod, new Set()); }
+            byModule.get(mod).add(name);
+        }
+    }
+
+    const lines = [];
+    for (const [mod, names] of [...byModule.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+        lines.push(`from ${mod} import ${[...names].sort().join(', ')}`);
+    }
+    return lines.length ? lines.join('\n') + '\n\n' : '';
+}
+
+/** `import module` lines for unit-test exports, matching code-file basenames. */
+function testModuleImports(model, authors, functions) {
+    const modules = new Set();
+    if (authors == null) {
+        modules.add(exportModuleName(model.id));
+    } else {
+        for (const [, func] of functions) {
+            if (!func.get('testable')) { continue; }
+            const owner = func.get('owner')?.toString() || '';
+            modules.add(exportModuleName(model.id, owner));
+        }
+        // No testable funcs: still import module(s) for the selected author(s)/shared.
+        if (modules.size === 0) {
+            for (const id of normalizeAuthorIds(authors)) {
+                modules.add(exportModuleName(model.id, id));
+            }
+            if (authors === '' || (Array.isArray(authors) && authors.includes(''))) {
+                modules.add(exportModuleName(model.id));
+            }
+        }
+    }
+    return [...modules].sort().map(m => `import ${m}`).join('\n') + '\n\n';
 }
 // Performs a topological sort of the functions based on calls to ensure that called functions are
 // defined before they are called. Only edges between functions in `functions` are considered
@@ -281,8 +361,9 @@ function sortFunctions(model, functions) {
 }
 function generatePythonTemplate(model, options, authors=null, withTypes=true) {
     const data = model.modelData.toJSON();
-    const { by, functions } = dealWithAuthors(model, authors, options);
+    const { by, functions, showOwners, includeAll } = dealWithAuthors(model, authors, options);
     let text = `"""\n${data.documentation || DEFAULT_PROGRAM_HEADER}\n\nBy: ${by}\n"""\n\n`;
+    if (!includeAll) { text += crossFileImports(model, functions); }
     if (data.globalCode) { text += `${data.globalCode}\n\n`; }
     const funcs = sortFunctions(model, functions);
     let hasMainFunc = false;
@@ -295,9 +376,11 @@ function generatePythonTemplate(model, options, authors=null, withTypes=true) {
         const returns = func.get("returns")?.toJSON() || [];
         let funcText = pythonDefLine(name, params, returns, withTypes) + "\n";
 
-        // Create the docstring
+        // Create the docstring (include owner when combined/multi-author and not shared)
         const desc = func.get("desc")?.toString() || "";
-        if (desc) { funcText += pythonDocstring(desc, options, params, returns); }
+        const owner = func.get("owner")?.toString() || "";
+        const ownerLabel = (showOwners && owner) ? authorLabel(options, owner) : '';
+        if (desc || ownerLabel) { funcText += pythonDocstring(desc, options, params, returns, ownerLabel); }
 
         const code = func.get("code")?.toString() || "";
         if (code) {
@@ -345,7 +428,8 @@ export function exportToPython(model, options, withTypes=true) {
 function generatePythonTests(model, options={}, authors=null) {
     const data = model.modelData.toJSON();
     const { by, functions } = dealWithAuthors(model, authors, options);
-    let text = `"""\n${data.testDocumentation || "Tests for the " + model.id + " module"}\n\nBy: ${by}\n"""\n\nimport pytest\n\nimport ` + model.id + `\n\n`;
+    let text = `"""\n${data.testDocumentation || "Tests for the " + model.id + " module"}\n\nBy: ${by}\n"""\n\nimport pytest\n\n`;
+    text += testModuleImports(model, authors, functions);
     if (data.testGlobalCode) { text += `${data.testGlobalCode}\n\n`; }
 
     for (const [key, func] of functions) {
