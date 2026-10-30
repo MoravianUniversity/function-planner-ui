@@ -563,8 +563,11 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
             text-align: center;
             vertical-align: bottom;
         }
-        .func-var-type:has(option[value*=" "]:checked):not(:disabled),
-        .func-var-type:has(option[data-custom-type]:checked):not(:disabled) { max-width: calc(100% - 1.575em - 0.2em); }
+        /* Skipped on Chromium (-webkit-app-region is Chromium-only), where the extra max-width clips the select text. */
+        @supports not (-webkit-app-region: none) {
+            .func-var-type:has(option[value*=" "]:checked):not(:disabled),
+            .func-var-type:has(option[data-custom-type]:checked):not(:disabled) { max-width: calc(100% - 1.575em - 0.2em); }
+        }
         .func-var-type:has(option[value*=" "]:checked):not(:disabled) + .func-var-type-edit,
         .func-var-type:has(option[data-custom-type]:checked):not(:disabled) + .func-var-type-edit { display: inline-block; }
 
