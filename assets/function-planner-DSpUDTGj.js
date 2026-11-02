@@ -1,0 +1,1 @@
+import{t as e}from"./function-planner-CMuyc5g1.js";window.addEventListener(`DOMContentLoaded`,()=>{e(`planner`,`default`,{allowedTypes:[`int`,`float`,`str`,`bool`,`list`,`tuple`,`dict`,`set`,`custom`],minFunctions:5,minTestable:2,adminMode:!0,canClaimFuncs:!0})});
