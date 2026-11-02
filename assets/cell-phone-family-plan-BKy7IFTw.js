@@ -1,0 +1,1 @@
+import{t as e}from"./function-planner-BKb23Agg.js";var t={functions:[{key:1,name:`main`}],calls:[]};window.addEventListener(`DOMContentLoaded`,()=>{e(`planner`,`cell-phone-family-plan`,{initialModel:t,allowedTypes:[`int`,`float`,`str`,`bool`,`list`],minFunctions:9,minTestable:5,adminMode:!1,functionReadOnly:[{for:`^main$`,fields:[`params`,`returns`]}]})});
