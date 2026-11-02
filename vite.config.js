@@ -1,9 +1,33 @@
 import { defineConfig } from 'vite';
-import cdn from 'vite-plugin-cdn-import';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+import { readFileSync } from 'fs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const require = createRequire(import.meta.url);
+
+// GoJS is far larger than everything else combined, so production builds leave it
+// out of the bundle and load the same version as an ES module from a CDN
+// (browser-cached across pages and deploys). Dev server keeps using node_modules.
+function gojsVersion() {
+  // gojs' "exports" hides package.json, so locate it from the resolved entry file.
+  const pkgPath = resolve(dirname(require.resolve('gojs')), '..', 'package.json');
+  return JSON.parse(readFileSync(pkgPath, 'utf8')).version;
+}
+
+function gojsFromCdn() {
+  const url = `https://cdn.jsdelivr.net/npm/gojs@${gojsVersion()}/release/go.mjs`;
+  return {
+    name: 'gojs-from-cdn',
+    apply: 'build',
+    enforce: 'pre',
+    resolveId(source) {
+      if (source === 'gojs') return { id: url, external: true };
+      return null;
+    },
+  };
+}
 
 export default defineConfig({
   root: './',
@@ -22,22 +46,9 @@ export default defineConfig({
         'madlibs': resolve(__dirname, 'madlibs.html'),
         'final': resolve(__dirname, 'final.html'),
       },
-      output: {
-        manualChunks: {
-          yjs: ['yjs', 'y-websocket', 'y-indexeddb', 'fast-diff'],
-          ui: ['prismjs', 'sortablejs', 'sweetalert2'],
-          // gojs: ['gojs'],
-        }
-      }
-    }
+    },
   },
-  plugins: [
-    cdn({
-      modules: [
-        {name: 'gojs', var: 'go', path: `release/go.js`},
-      ],
-    }),
-],
+  plugins: [gojsFromCdn()],
   server: {
     open: '/function-planner.html'
   }
