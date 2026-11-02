@@ -3,6 +3,7 @@ import go from 'gojs';
 import { AvoidsLinksRouter } from './AvoidsLinksRouter.js';
 
 import { makeNameEditor, isBlankFunctionName } from './name-editor.js';
+import { hitNodeGesture, shouldStartDragging, shouldStartLinking } from './node-gestures.js';
 import { pythonDefLine } from './save-load.js';
 import { updateAllProblems, updateInterNodeProblems, willFuncBecomeRecursive } from './problem-checker.js';
 import { ALLOW_RECURSIVE, SHOW_COLLAPSE_BUTTON } from './settings.js';
@@ -377,6 +378,52 @@ export function setupDiagram(
         go.LinkingTool.prototype.doActivate.call(diagram.toolManager.linkingTool);
         go.ToolManager.prototype.hideToolTip.call(diagram.toolManager);
     }
+
+    function nodeCanReorder(node) {
+        if (globalReadonly) return false;
+        if (!(node instanceof go.Node) || node.data?.isGroup || node.data?.readOnly) return false;
+        if (node.layerName === 'Unconnected') return false;
+        if (!node.movable) return false;
+        return findSiblingNodes(node).length >= 2;
+    }
+
+    function gestureDelta() {
+        const a = diagram.firstInput.documentPoint;
+        const b = diagram.lastInput.documentPoint;
+        return { dx: b.x - a.x, dy: b.y - a.y };
+    }
+
+    // Expand call-link starts (halo / () / vertical interior) without growing layout bounds.
+    const linkingTool = diagram.toolManager.linkingTool;
+    linkingTool.canStart = function() {
+        this.startObject = null;
+        if (globalReadonly || !diagram.allowLink) return false;
+        const hit = hitNodeGesture(diagram, diagram.firstInput.documentPoint);
+        if (!hit) return false;
+        const { dx, dy } = gestureDelta();
+        if (!shouldStartLinking(hit.zone, nodeCanReorder(hit.node), dx, dy)) return false;
+        const port = hit.node.findPort('');
+        if (!port || !port.fromLinkable) return false;
+        this.startObject = port;
+        const ok = go.LinkingTool.prototype.canStart.call(this);
+        if (!ok) this.startObject = null;
+        return ok;
+    };
+
+    // Halo has no GraphObject — still select the nearest node on a stationary click.
+    const clickSelectingTool = diagram.toolManager.clickSelectingTool;
+    const origStandardMouseSelect = clickSelectingTool.standardMouseSelect;
+    clickSelectingTool.standardMouseSelect = function() {
+        const pt = diagram.lastInput.documentPoint;
+        if (!diagram.findPartAt(pt, false)) {
+            const hit = hitNodeGesture(diagram, pt);
+            if (hit) {
+                diagram.select(hit.node);
+                return;
+            }
+        }
+        origStandardMouseSelect.call(this);
+    };
 
     // Link template
     diagram.linkTemplate = new go.Link({
@@ -909,6 +956,15 @@ export function setupDiagram(
     // Live-reorder siblings while dragging. Keep the dragged node in layout (so space
     // is reserved) but disable animation and re-pin it to the pointer after relayout.
     const draggingTool = diagram.toolManager.draggingTool;
+    const origDragCanStart = draggingTool.canStart;
+    draggingTool.canStart = function() {
+        const hit = hitNodeGesture(diagram, diagram.firstInput.documentPoint);
+        if (hit) {
+            const { dx, dy } = gestureDelta();
+            if (!shouldStartDragging(hit.zone, nodeCanReorder(hit.node), dx, dy)) return false;
+        }
+        return origDragCanStart.call(this);
+    };
     const origDoActivate = draggingTool.doActivate;
     draggingTool.doActivate = function() {
         dragSequenceDirty.clear();

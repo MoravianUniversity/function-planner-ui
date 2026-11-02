@@ -14,8 +14,13 @@ import { isReadOnly } from './inspector.js';
  * @returns {go.Panel} The name editor panel.
  */
 export function makeNameEditor(model, options) {
-    return new go.Panel("Horizontal", { type: go.Panel.Horizontal, margin: new go.Margin(10, 6, 6, 6) }).add(
+    return new go.Panel("Horizontal", {
+        name: 'NAME_PANEL',
+        type: go.Panel.Horizontal,
+        margin: new go.Margin(10, 6, 6, 6),
+    }).add(
         new go.TextBlock("", {
+            name: 'NAME',
             isMultiline: false,
             cursor: 'pointer',
             editable: true,
@@ -30,9 +35,11 @@ export function makeNameEditor(model, options) {
                     return isBlankFunctionName(name) ? '' : name;
                 }),
         new go.TextBlock("", {
+            name: 'PARENS',
             isMultiline: false,
             editable: false,
             text: '()',
+            cursor: 'crosshair',
         }).theme('stroke', 'stroke').theme('font', 'text')
     );
 }

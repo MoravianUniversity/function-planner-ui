@@ -329,9 +329,10 @@ serious warnings with a <span class="stroke-warning">yellow</span> outline.</p>
 </ul>
 <p>The buttons on the left allow you to add functions, generate a Python
 template, and other actions.</p>
-<p>To add a new function call, drag from the edge of one function to another.
-They can be reconnected as needed. Double-clicking a call will reverse its
-direction.</p>
+<p>To add a new function call, drag from the edge of a function (or vertically
+through the name) to another function. A horizontal drag on the name reorders
+siblings instead. Calls can be reconnected as needed. Double-clicking a call
+will reverse its direction.</p>
 <p>To remove functions or calls, select them and press the delete key.</p></div>`));
 }
 
