@@ -1,4 +1,4 @@
-import{t as e}from"./function-planner-CMuyc5g1.js";var t={functions:[{key:1,name:`main`,io:`none`,code:`# Read the corpus of words from the file
+import{t as e}from"./function-planner-y2Z7eWcg.js";var t={functions:[{key:1,name:`main`,io:`none`,code:`# Read the corpus of words from the file
 words = read_words("tom-swift.txt")
 
 print("===== New Story using Bigrams =====")

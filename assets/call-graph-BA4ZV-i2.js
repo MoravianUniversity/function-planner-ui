@@ -1,0 +1,1 @@
+import{t as e}from"./function-planner-y2Z7eWcg.js";window.addEventListener(`DOMContentLoaded`,()=>{e(`planner`,`call-graph`,{callGraphOnly:!0})});
