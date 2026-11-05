@@ -704,11 +704,12 @@ export class Model {
     //    desc (Y.Text)
     //    code (Y.Text)
     //    testCode (Y.Text)
-    //    params (Y.Array of Y.Map with name (Y.Text), desc (Y.Text), and type (string))
+    //    params (Y.Array of Y.Map with name (Y.Text), desc (Y.Text), type (string), and optional default (string))
     //    returns (Y.Array of Y.Map with desc (Y.Text) and type (string))
     //       the last two are accessed via:
     //           updateFunc(key, 'params[0].name', '...')  (can also use 'params[0]' and 'params' to update many at once)
-    //           updateFunc(key, 'returns[0].name', '...')
+    //           updateFunc(key, 'params[0].default', '...')
+    //           updateFunc(key, 'returns[0].type', '...')
     //    io (fixed string)
     //    testable (boolean)
     //    owner (string)
@@ -766,7 +767,7 @@ export class Model {
      * @returns {[string, number|null, string|null]} value of the property
      */
     parseFuncProperty(property) {
-        const result = /^(params|returns)(\[(\d+)\](\.(name|desc|type))?)?$/.exec(property);
+        const result = /^(params|returns)(\[(\d+)\](\.(name|desc|type|default))?)?$/.exec(property);
         if (result) {
             const [, type, , index, , subprop] = result;
             return [type, index ? parseInt(index) : null, subprop ?? null];

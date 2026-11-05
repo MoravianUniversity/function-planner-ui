@@ -34,6 +34,8 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     --button-text-hover-color: var(--button-text-color);
     --button-text-disabled-color: #6b7280;
     --button-icon-shadow: 2px 3px 1px rgba(20, 20, 20, .7);
+    --optional-color: #2563eb;             /* blue-600 */
+    --default-color: #16a34a;              /* green-600 — same weight as optional blue */
 
     --tool-background-color: #eceef1;      /* gray-150 */
     --tooltip-background-color: var(--tool-background-color);
@@ -72,6 +74,8 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     --button-color: #0056b3;
     --button-hover-color: #007bff;
     /* --button-text-color: #f3f4f6; */
+    --optional-color: #60a5fa;             /* blue-400 */
+    --default-color: #4ade80;              /* green-400 — same weight as optional blue */
 
     --tool-background-color: #374151;      /* gray-700 */
     --insp-vars-background-color: #4b5563; /* gray-600 */
@@ -532,11 +536,79 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
 
     /* Function params/returns */
     .func-var { margin: 0.75em 0; padding: 0.5em; padding-left: 0.6em; border: 1px solid var(--stroke-color); border-radius: 0.5em; background-color: var(--insp-var-background-color); position: relative; box-shadow: 0 0 0.5em var(--shadow-color); }
+    .func-var-name,
+    .func-var-default {
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        box-sizing: border-box;
+        margin: 0.1em 0;
+        padding: 0.1em 0.25em;
+        line-height: 1.25;
+        vertical-align: middle;
+    }
     .func-var-name {
         @supports not (field-sizing: content) { width: 12em; } /* fallback for Firefox and Safari */
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
     }
     .func-var-type { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;; }
+    .func-var-is-optional .func-var-type { color: var(--optional-color, #2563eb); }
+    /* Shared chip-button size (rem so UA button font-size can't inflate them) */
+    .func-var > .fp-optional-toggle,
+    .func-var > .func-var-default-toggle,
+    .func-var .func-var-type-edit {
+        width: 1.35rem;
+        height: 1.35rem;
+        margin: 0.1em;
+        font-size: 0.75rem;
+    }
+    .func-var .func-var-type-edit {
+        margin: 0.1em 0.1em 0.1em 0.2em;
+    }
+    .func-var-default-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        padding: 0;
+        border: 1px solid var(--insp-var-input-border-color);
+        border-radius: 0.3em;
+        background-color: var(--tool-background-color);
+        color: var(--placeholder-color);
+        cursor: pointer;
+        vertical-align: middle;
+        line-height: 0;
+    }
+    .func-var-default-toggle .func-var-default-eq-icon {
+        width: 0.95em;
+        height: 0.95em;
+        display: block;
+    }
+    .func-var-default-toggle[aria-pressed="true"] {
+        color: var(--default-color);
+        border-color: var(--default-color);
+        background-color: color-mix(in srgb, var(--default-color) 16%, var(--tool-background-color));
+    }
+    .func-var-default-toggle[aria-pressed="true"] .func-var-default-eq-icon {
+        width: 1.05em;
+        height: 1.05em;
+    }
+    .func-var-default-toggle:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+    .func-var-default-wrap {
+        /* Participate in the row like the name input (no extra flex box height). */
+        display: contents;
+    }
+    .func-var-default-wrap[hidden] { display: none !important; }
+    .func-var-default {
+        margin-left: 0.15em;
+        margin-right: 0.35em;
+        color: var(--default-color);
+        border-color: var(--default-color);
+        background-color: color-mix(in srgb, var(--default-color) 16%, var(--tool-background-color));
+    }
+    .func-var-default::placeholder {
+        color: color-mix(in srgb, var(--default-color) 55%, var(--placeholder-color));
+    }
     .func-var-desc { width: 100%; display: inline-block; }
     .func-vars {
         position: relative;
@@ -554,19 +626,20 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
         .func-var-type-holder { white-space: nowrap; display: inline-block; max-width: 100%; }
         .func-var-type-edit {
             display: none;
-            margin: 0.1em 0 0.1em 0.2em;
-            width: 1.575em; height: 1.575em;
             padding: 0;
             border: 1px solid var(--insp-var-input-border-color);
+            border-radius: 0.3em;
             background-color: var(--tool-background-color);
             color: var(--text-color);
             text-align: center;
-            vertical-align: bottom;
+            vertical-align: middle;
+            cursor: pointer;
+            line-height: 1.35rem;
         }
         /* Skipped on Chromium (-webkit-app-region is Chromium-only), where the extra max-width clips the select text. */
         @supports not (-webkit-app-region: none) {
             .func-var-type:has(option[value*=" "]:checked):not(:disabled),
-            .func-var-type:has(option[data-custom-type]:checked):not(:disabled) { max-width: calc(100% - 1.575em - 0.2em); }
+            .func-var-type:has(option[data-custom-type]:checked):not(:disabled) { max-width: calc(100% - 1.35rem - 0.2em); }
         }
         .func-var-type:has(option[value*=" "]:checked):not(:disabled) + .func-var-type-edit,
         .func-var-type:has(option[data-custom-type]:checked):not(:disabled) + .func-var-type-edit { display: inline-block; }
@@ -659,6 +732,48 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     .func-returns { display: none; }
 }
 
+/* Optional-type toggle (inspector + type editor) */
+.fp-optional-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 1.35rem;
+    height: 1.35rem;
+    padding: 0;
+    margin: 0 0.15em 0 0.4em;
+    border: 1px solid var(--insp-var-input-border-color, #555);
+    border-radius: 0.3em;
+    background-color: var(--tool-background-color, #eceef1);
+    color: var(--placeholder-color, #6b7280);
+    cursor: pointer;
+    vertical-align: middle;
+    line-height: 0;
+    font-size: 0.75rem;
+}
+.fp-optional-toggle .fp-optional-icon {
+    width: 0.95em;
+    height: 0.95em;
+    display: block;
+}
+.fp-optional-toggle .fp-optional-glyph-on { display: none; }
+.fp-optional-toggle .fp-optional-glyph-off { display: inline; }
+.fp-optional-toggle[aria-pressed="true"] {
+    color: var(--optional-color, #2563eb);
+    border-color: var(--optional-color, #2563eb);
+    background-color: color-mix(in srgb, var(--optional-color, #2563eb) 16%, var(--tool-background-color, #eceef1));
+}
+.fp-optional-toggle[aria-pressed="true"] .fp-optional-icon {
+    width: 1.2em;
+    height: 1.2em;
+}
+.fp-optional-toggle[aria-pressed="true"] .fp-optional-glyph-on { display: inline; }
+.fp-optional-toggle[aria-pressed="true"] .fp-optional-glyph-off { display: none; }
+.fp-optional-toggle:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 /* Type Editor Styles */
 .func-planner-type-builder.type-editor {
     text-align: left !important;
@@ -674,15 +789,22 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     padding-bottom: 0.7em;
 }
 .type-editor {
+    --optional-color: #2563eb;
     .type-container { display: inline-block; margin: 5px 0; }
+    .type-body { display: inline; }
     select, .custom-type-input { margin: 0 2px; padding: 2px; }
     button { cursor: pointer; }
     button:disabled { color: gray; cursor: not-allowed; opacity: 0.5; }
-    select:first-child { margin-left: 0; }
+    .type-body > select:first-child { margin-left: 0; }
     select:has(option[value=""]:checked) { color: var(--placeholder-color); font-style: italic; }
     .custom-type-input { font-family: inherit; }
     .mode-select { margin: 0 5px; }
     .connector { margin: 0 2px; }
+    .fp-optional-toggle { margin: 0 0.1em 0 0.45em; }
+    .type-body:has(> .fp-optional-toggle[aria-pressed="true"]) > select:not(.mode-select),
+    .type-body:has(> .fp-optional-toggle[aria-pressed="true"]) > .custom-type-input {
+        color: var(--optional-color, #2563eb);
+    }
     .indented-nested { display: block; margin-left: 30px; }
     .nested-leader-container, .dict-label { display: inline-block; margin: 6px 5px 5px 0; vertical-align: top; }
     .dict-label { line-height: 24px; }

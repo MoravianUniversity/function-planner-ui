@@ -8,7 +8,8 @@ import Swal from 'sweetalert2';
 import { wrapWithLabel, wrapAsDocstring, makeCheckbox, makeTextarea, makeCodeEditorWithVisibility, makeProblemsDiv, isReadOnly, resolveFunctionReadOnly, isParamStructureReadOnly, isReturnStructureReadOnly, isParamFacetReadOnly, isReturnFacetReadOnly } from './inspector.js';
 import { loadSVG, makeOption, makeAddButton, makeRemoveButton, setTextInputValue } from './utils.js';
 import { authorLabel } from './authors.js';
-import { toEnglishType } from './type-utils.js';
+import { toEnglishType, isOptionalType, stripOptional, withOptional } from './type-utils.js';
+import { createOptionalToggle, setOptionalToggle, isOptionalToggleOn } from './optional-toggle.js';
 
 import TypeEditor from './type-editor.js';
 
@@ -214,30 +215,38 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
     function setProp(index, subprop, value, cursorPos=null) { funcs.set(`${property}[${index}].${subprop}`, value, cursorPos); }
     function getIndex(e) { return Array.prototype.indexOf.call(list.children, e.target.closest(".func-var")); }
 
-    // name and desc listeners
+    // name, desc, and default text listeners (not advanced-menu checkboxes)
     list.addEventListener("input", (e) => {
         if (e.target.closest(".sortable-ghost") || e.target.closest(".sortable-drag")) { return; }
-        for (const clazz of e.target.classList) {
-            if (clazz.startsWith("func-var-")) {
-                const [, , prop] = clazz.split('-'); // prop === "name" || prop === "desc"
-                setProp(getIndex(e), prop, e.target.value, e.target.selectionStart);
-                if (prop === "name" && !options.adminMode) {
-                    const ro = funcs.effectiveReadOnly();
-                    refreshListRO(ro);
-                }
-            }
+        let prop = null;
+        if (e.target.classList.contains("func-var-name")) { prop = "name"; }
+        else if (e.target.classList.contains("func-var-desc")) { prop = "desc"; }
+        else if (e.target.classList.contains("func-var-default")) { prop = "default"; }
+        if (!prop) { return; }
+        setProp(getIndex(e), prop, e.target.value, e.target.selectionStart);
+        if (prop === "name" && !options.adminMode) {
+            refreshListRO(funcs.effectiveReadOnly());
         }
     });
-    // type listeners
+    // type + advanced menu listeners
     list.addEventListener("change", async (e) => {
         if (e.target.closest(".sortable-ghost") || e.target.closest(".sortable-drag")) { return; }
+        const box = e.target.closest(".func-var");
+        if (!box) { return; }
+        const index = getIndex(e);
+
         if (!e.target.selectedOptions) { return; }
-        if (e.target.selectedOptions[0].text.endsWith("...")) {
-            const result = await showTypeBuilder(options, e.target.value);
-            if (result === null) { e.target.value = e.target.lastSelected; return; }
-            setProp(getIndex(e), "type", result);
-        } else {
-            setProp(getIndex(e), "type", e.target.value);
+        if (e.target.classList.contains("func-var-type")) {
+            const optionalOn = Boolean(options.allowOptionalTypes) &&
+                isOptionalToggleOn(box.querySelector(".fp-optional-toggle"));
+            if (e.target.selectedOptions[0].text.endsWith("...")) {
+                const fullType = optionalOn ? withOptional(e.target.value) : e.target.value;
+                const result = await showTypeBuilder(options, fullType);
+                if (result === null) { e.target.value = e.target.lastSelected; return; }
+                setProp(index, "type", result);
+            } else {
+                setProp(index, "type", optionalOn ? withOptional(e.target.value) : e.target.value);
+            }
         }
     });
     // add/remove + edit type buttons
@@ -245,7 +254,12 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
         if (e.target.closest(".sortable-ghost") || e.target.closest(".sortable-drag")) { return; }
         const edit = e.target.closest(".func-var-type-edit");
         if (edit) {
-            const result = await showTypeBuilder(options, edit.parentElement.querySelector(".func-var-type").value);
+            const box = edit.closest(".func-var");
+            const select = box.querySelector(".func-var-type");
+            const optionalOn = Boolean(options.allowOptionalTypes) &&
+                isOptionalToggleOn(box.querySelector(".fp-optional-toggle"));
+            const fullType = optionalOn ? withOptional(select.value) : select.value;
+            const result = await showTypeBuilder(options, fullType);
             if (result !== null) { setProp(getIndex(e), "type", result); }
             return;
         }
@@ -284,7 +298,7 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
     }
 
     function itemPropIsRO(ro, index, subprop, name=null) {
-        if (property === 'params' && (subprop === 'name' || subprop === 'type' || subprop === 'desc')) {
+        if (property === 'params' && (subprop === 'name' || subprop === 'type' || subprop === 'desc' || subprop === 'default')) {
             if (isParamFacetReadOnly(ro, name, subprop)) { return true; }
         }
         if (property === 'returns' && (subprop === 'type' || subprop === 'desc')) {
@@ -299,6 +313,9 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
         const name = hasName ? box.querySelector(".func-var-name") : null;
         const type = box.querySelector(".func-var-type");
         const desc = box.querySelector(".func-var-desc");
+        const defaultInput = box.querySelector(".func-var-default");
+        const optionalToggle = box.querySelector(".fp-optional-toggle");
+        const defaultToggle = box.querySelector(".func-var-default-toggle");
         const insert = box.querySelector(".func-var-insert");
         const remove = box.querySelector(".func-button-remove");
         const drag = box.querySelector(".func-var-drag-handle");
@@ -308,6 +325,9 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
         if (name) { name.readOnly = itemPropIsRO(ro, i, "name", nameValue); }
         type.disabled = itemPropIsRO(ro, i, "type", nameValue);
         desc.readOnly = itemPropIsRO(ro, i, "desc", nameValue);
+        if (defaultInput) { defaultInput.readOnly = itemPropIsRO(ro, i, "default", nameValue); }
+        if (optionalToggle) { optionalToggle.disabled = itemPropIsRO(ro, i, "type", nameValue); }
+        if (defaultToggle) { defaultToggle.disabled = itemPropIsRO(ro, i, "default", nameValue); }
 
         const itemRO = itemIsRO(ro, i, nameValue);
         box.classList.toggle("func-var-readonly", itemRO);
@@ -334,25 +354,52 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
             if (value) {
                 // create the empty boxes
                 for (let i = 0; i < value.length; i++) {
-                    const box = makeVarBox(model, options, hasName);
+                    const box = makeVarBox(model, options, hasName, {
+                        onOptionalToggle: (b, checked) => {
+                            const i2 = Array.prototype.indexOf.call(list.children, b);
+                            if (i2 < 0) { return; }
+                            const select = b.querySelector(".func-var-type");
+                            setProp(i2, "type", checked ? withOptional(select.value) : stripOptional(select.value) || select.value);
+                            setOptionalIndicator(b, checked);
+                        },
+                        onDefaultToggle: (b, on) => {
+                            const i2 = Array.prototype.indexOf.call(list.children, b);
+                            if (i2 < 0) { return; }
+                            setDefaultVisible(b, on);
+                            if (on) {
+                                b.querySelector(".func-var-default")?.focus();
+                            } else {
+                                const defaultInput = b.querySelector(".func-var-default");
+                                if (defaultInput) { defaultInput.value = ""; }
+                                setProp(i2, "default", "");
+                            }
+                        }
+                    });
                     list.appendChild(box);
                     if (!options.adminMode) {
                         updateItemRO(box, i, funcs.effectiveReadOnly());
                     }
                 }
-                // update all boxes
-                for (const [i, v] of value.entries()) { updateVarBox(list, i, v, hasName); }
+                // Full rebuild: sync default visibility from model values
+                for (const [i, v] of value.entries()) {
+                    updateVarBox(list, i, v, hasName, options, { syncDefaultVisibility: true });
+                }
             }
         } else if (prop == null) {
-            // update single item with an entire object (this happens when a new property is added)
-            updateVarBox(list, index, value, hasName);
+            // Entire param/return object updated (Yjs fires this when a map key is
+            // added/changed). Do NOT sync default visibility from text — the = toggle owns it.
+            updateVarBox(list, index, value, hasName, options, { syncDefaultVisibility: false });
         } else {
             // update single property (this happens when an existing property is updated)
-            const input = list.children[index].querySelector(`.func-var-${prop}`);
-            if (input) {
-                const val = value?.toString() ?? "";
-                if (prop === "type") { setCustomTypeOption(input, val); }
-                else { setTextInputValue(input, val); }
+            const box = list.children[index];
+            const val = value?.toString() ?? "";
+            if (prop === "type") {
+                applyTypeToBox(box, val, options);
+            } else {
+                const input = box.querySelector(`.func-var-${prop}`);
+                if (input) {
+                    setTextInputValue(input, val);
+                }
             }
         }
     });
@@ -367,7 +414,7 @@ function createVarsBox(model, options, name, property, hasName, funcs) {
     return div;
 }
 
-function updateVarBox(list, index, value, hasName) {
+function updateVarBox(list, index, value, hasName, options={}, { syncDefaultVisibility=false }={}) {
     const box = list.children[index];
 
     // update name
@@ -377,17 +424,57 @@ function updateVarBox(list, index, value, hasName) {
         setTextInputValue(name, val);
     }
 
-    // update type
-    const newType = value.type?.toString() ?? "";
-    const type = box.querySelector(".func-var-type");
-    setCustomTypeOption(type, newType);
+    // update type (when optional feature is on, select shows stripped type)
+    applyTypeToBox(box, value.type?.toString() ?? "", options);
 
     // update description
     const val = value.desc?.toString() ?? "";
     const desc = box.querySelector(".func-var-desc");
     setTextInputValue(desc, val);
+
+    // update default text; visibility only from model on full rebuild
+    const defaultInput = box.querySelector(".func-var-default");
+    if (defaultInput) {
+        const def = value.default?.toString() ?? "";
+        setTextInputValue(defaultInput, def);
+        if (syncDefaultVisibility) {
+            syncDefaultFromModel(box, def);
+        }
+    }
 }
-function makeVarBox(model, options, hasName) {
+function applyTypeToBox(box, fullType, options={}) {
+    const type = box.querySelector(".func-var-type");
+    const optionalFeature = Boolean(options.allowOptionalTypes);
+    const optional = optionalFeature && isOptionalType(fullType);
+    const displayType = optional ? stripOptional(fullType) : fullType;
+    setCustomTypeOption(type, displayType);
+    setOptionalIndicator(box, optional);
+}
+function setOptionalIndicator(box, optional) {
+    box.classList.toggle("func-var-is-optional", optional);
+    setOptionalToggle(box.querySelector(".fp-optional-toggle"), optional);
+}
+/** Sync default = toggle + visibility from model data (full row update). */
+function syncDefaultFromModel(box, defValue) {
+    const hasDefault = Boolean((defValue ?? "").toString().trim());
+    setDefaultVisible(box, hasDefault);
+}
+/** Show/hide the default value input from the = toggle state. */
+function setDefaultVisible(box, visible) {
+    const on = Boolean(visible);
+    const toggle = box.querySelector(".func-var-default-toggle");
+    if (toggle) {
+        toggle.setAttribute("aria-pressed", on ? "true" : "false");
+        toggle.classList.toggle("func-var-default-on", on);
+        toggle.title = on
+            ? "Has default value. Click to remove."
+            : "Add default value";
+        toggle.setAttribute("aria-label", on ? "Default value on" : "Add default value");
+    }
+    const wrap = box.querySelector(".func-var-default-wrap");
+    if (wrap) { wrap.hidden = !on; }
+}
+function makeVarBox(model, options, hasName, handlers={}) {
     const box = document.createElement("div");
     box.className = "func-var";
     box.append(
@@ -401,11 +488,61 @@ function makeVarBox(model, options, hasName) {
             document.createElement("span"), " : "
         );
     }
-    box.append(
-        makeTypeElement(model, options),
-        makeDescElement()
-    );
+    box.append(makeTypeElement(model, options));
+    if (options.allowOptionalTypes) {
+        box.append(createOptionalToggle({
+            onChange: (checked) => {
+                if (handlers.onOptionalToggle) { handlers.onOptionalToggle(box, checked); }
+            }
+        }));
+    }
+    if (hasName && options.allowParamDefaults) {
+        box.append(
+            makeDefaultToggle(handlers),
+            makeDefaultElement()
+        );
+    }
+    box.append(makeDescElement());
     return box;
+}
+function makeDefaultToggle(handlers={}) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "func-var-default-toggle";
+    // SVG equals — optically centered, sized like the optional icon
+    btn.innerHTML = `<svg class="func-var-default-eq-icon" viewBox="0 0 20 20" width="1em" height="1em" aria-hidden="true" focusable="false">
+        <rect x="3.5" y="6.25" width="13" height="2.25" rx="0.6" fill="currentColor"/>
+        <rect x="3.5" y="11.5" width="13" height="2.25" rx="0.6" fill="currentColor"/>
+    </svg>`;
+    btn.setAttribute("aria-pressed", "false");
+    btn.title = "Add default value";
+    btn.setAttribute("aria-label", "Add default value");
+    btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (btn.disabled) { return; }
+        const box = btn.closest(".func-var");
+        const next = btn.getAttribute("aria-pressed") !== "true";
+        if (box && handlers.onDefaultToggle) {
+            handlers.onDefaultToggle(box, next);
+        } else {
+            setDefaultVisible(box, next);
+        }
+    });
+    return btn;
+}
+function makeDefaultElement() {
+    const wrap = document.createElement("span");
+    wrap.className = "func-var-default-wrap";
+    wrap.hidden = true;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "func-var-default";
+    input.placeholder = "default";
+    input.title = "Default value";
+    input.writingSuggestions = "false";
+    wrap.append(input);
+    return wrap;
 }
 function makeInsertButton() {
     const insert = makeAddButton();
@@ -511,7 +648,11 @@ async function showTypeBuilder(options, initialType) {
                 }
             }
             const editor = new TypeEditor(content, {
-                onChange, allowedTypes: options.allowedTypes, initialType: initialType.trim()
+                onChange,
+                allowedTypes: options.allowedTypes,
+                initialType: initialType.trim(),
+                allowUnionTypes: Boolean(options.allowUnionTypes),
+                allowOptionalTypes: Boolean(options.allowOptionalTypes)
             });
         },
     });

@@ -1,3 +1,5 @@
+import { createOptionalToggle, setOptionalToggle, isOptionalToggleOn } from './optional-toggle.js';
+
 /**
  * TypeEditor - A visual editor for Python type annotations
  * 
@@ -104,12 +106,16 @@ class TypeEditor {
     #baseTypes;
     #containerTypes;
     #allTypes;
+    #allowUnionTypes;
+    #allowOptionalTypes;
 
     constructor(element, options = {}) {
         this.#element = element;
         this.#element.classList.add('type-editor');
         this.#typeId = 0;
         this.#onChangeCallback = options.onChange || null;
+        this.#allowUnionTypes = Boolean(options.allowUnionTypes);
+        this.#allowOptionalTypes = Boolean(options.allowOptionalTypes);
         
         // Default types
         const defaultBaseTypes = ['int', 'float', 'str', 'bool'];
@@ -158,7 +164,7 @@ class TypeEditor {
      * console.log(typeString); // "dict[str, int]"
      */
     getTypeString() {
-        const rootContainer = this.#element.querySelector('.type-container');
+        const rootContainer = this.#element.querySelector(':scope > .type-container');
         if (rootContainer) {
             return this.#generateTypeString(rootContainer);
         }
@@ -276,6 +282,7 @@ class TypeEditor {
         this.#element.innerHTML = '';
         this.#typeId = 0;
         this.#createTypeDropdown(this.#element, true);
+        this.#notifyChange();
     }
     
     // Private: Notify of changes
@@ -283,6 +290,113 @@ class TypeEditor {
         if (this.#onChangeCallback) {
             this.#onChangeCallback(this.getTypeString());
         }
+    }
+
+    /**
+     * True when `parent` is an indented row directly under a union type-container.
+     * Direct union members may not be optional or another union.
+     */
+    #isDirectUnionMemberParent(parent) {
+        if (!parent?.classList?.contains('indented-nested')) { return false; }
+        const unionContainer = parent.parentElement;
+        if (!unionContainer?.classList?.contains('type-container')) { return false; }
+        const select = unionContainer.querySelector(':scope > .type-body > select:not(.mode-select)');
+        return select?.value === 'union';
+    }
+
+    /** Dropdown options for a given parent context (may include union). */
+    #typesToShow(parent) {
+        const inSetContext = this.#needsImmutableTypes(parent);
+        const types = inSetContext
+            ? [...this.#baseTypes, 'tuple']
+            : [...this.#allTypes];
+        const allowUnionHere = this.#allowUnionTypes && !this.#isDirectUnionMemberParent(parent);
+        if (allowUnionHere && !types.includes('union')) {
+            const customIdx = types.indexOf('custom');
+            if (customIdx >= 0) {
+                types.splice(customIdx, 0, 'union');
+            } else {
+                types.push('union');
+            }
+        }
+        return types;
+    }
+
+    /** Header controls (select / of-with / optional) live in `.type-body`. */
+    #ensureTypeBody(container) {
+        let body = container.querySelector(':scope > .type-body');
+        if (!body) {
+            body = document.createElement('span');
+            body.className = 'type-body';
+            container.insertBefore(body, container.firstChild);
+        }
+        return body;
+    }
+
+    #mainSelect(container) {
+        return container.querySelector(':scope > .type-body > select:not(.mode-select)') ||
+            container.querySelector(':scope > select:not(.mode-select)');
+    }
+
+    #clearContainerExtras(container) {
+        const body = container.querySelector(':scope > .type-body');
+        if (body) {
+            [...body.children].forEach((child) => {
+                if (child.tagName === 'SELECT' && !child.classList.contains('mode-select')) { return; }
+                if (child.classList?.contains('fp-optional-toggle')) { return; }
+                child.remove();
+            });
+        }
+        [...container.children].forEach((child) => {
+            if (child.classList?.contains('type-body')) { return; }
+            child.remove();
+        });
+    }
+
+    #addOptionalToggle(container, checked = false, parent = null) {
+        const placementParent = parent || container.parentElement;
+        const allowed = this.#allowOptionalTypes && !this.#isDirectUnionMemberParent(placementParent);
+        const body = this.#ensureTypeBody(container);
+        const existing = body.querySelector(':scope > .fp-optional-toggle');
+        if (!allowed) {
+            existing?.remove();
+            return null;
+        }
+        let toggle = existing;
+        if (toggle) {
+            setOptionalToggle(toggle, checked);
+        } else {
+            toggle = createOptionalToggle({
+                checked,
+                onChange: () => { this.#notifyChange(); }
+            });
+        }
+        this.#placeOptionalToggle(container, toggle);
+        return toggle;
+    }
+
+    /**
+     * Place optional inline after of/with when present, otherwise after the type select
+     * (or custom input).
+     */
+    #placeOptionalToggle(container, toggle = null) {
+        const body = this.#ensureTypeBody(container);
+        const btn = toggle || body.querySelector(':scope > .fp-optional-toggle');
+        if (!btn) { return; }
+        const after =
+            body.querySelector(':scope > .mode-select') ||
+            body.querySelector(':scope > .connector') ||
+            body.querySelector(':scope > .custom-type-input') ||
+            body.querySelector(':scope > select:not(.mode-select)');
+        if (after) {
+            after.after(btn);
+        } else {
+            body.appendChild(btn);
+        }
+    }
+
+    #isOptionalChecked(container) {
+        return isOptionalToggleOn(container.querySelector(':scope > .type-body > .fp-optional-toggle'));
     }
 
     // Private: Check if a string is a valid custom type name
@@ -305,7 +419,8 @@ class TypeEditor {
         let current = element;
         while (current) {
             if (current.classList && current.classList.contains('type-container')) {
-                const select = current.querySelector(':scope > select');
+                const select = current.querySelector(':scope > .type-body > select:not(.mode-select)') ||
+                    current.querySelector(':scope > select');
                 if (select && select.value === 'set') {
                     return true;
                 }
@@ -347,13 +462,7 @@ class TypeEditor {
         placeholderOption.textContent = 'type';
         select.appendChild(placeholderOption);
 
-        // Determine which types to show based on context
-        const inSetContext = this.#needsImmutableTypes(parent);
-        const immutableTypes = [...this.#baseTypes, 'tuple'];
-        const typesToShow = inSetContext ? immutableTypes : this.#allTypes;
-
-        // Add type options
-        typesToShow.forEach(type => {
+        this.#typesToShow(parent).forEach(type => {
             const option = document.createElement('option');
             option.value = type;
             option.textContent = type;
@@ -364,18 +473,17 @@ class TypeEditor {
         select.selectedIndex = 0;
 
         select.addEventListener('change', (e) => {
-            // Only handle change if a valid type is selected
             if (e.target.value) {
                 this.#handleTypeChange(e, container, id);
             } else {
-                // Clear nested elements if placeholder is selected
-                const childElements = container.querySelectorAll('.type-container:not(:first-child), .mode-select, .connector, .add-type-btn, .remove-type-btn, .indented-nested, .dict-label, .dict-connector');
-                childElements.forEach(el => el.remove());
+                this.#clearContainerExtras(container);
                 this.#notifyChange();
             }
         });
-        
-        container.appendChild(select);
+
+        const body = this.#ensureTypeBody(container);
+        body.appendChild(select);
+        this.#addOptionalToggle(container, false, parent);
         parent.appendChild(container);
         
         return container;
@@ -383,13 +491,12 @@ class TypeEditor {
 
     #handleTypeChange(event, container, id) {
         const selectedType = event.target.value;
-        
-        // Remove any existing nested elements
-        const childElements = container.querySelectorAll('.type-container:not(:first-child), .mode-select, .connector, .add-type-btn, .remove-type-btn, .indented-nested, .dict-label, .dict-connector, .custom-type-input');
-        childElements.forEach(el => el.remove());
+        this.#clearContainerExtras(container);
 
         if (selectedType === 'custom') {
             this.#addCustomInput(container);
+        } else if (selectedType === 'union') {
+            this.#addUnionInterface(container);
         } else if (this.#containerTypes.includes(selectedType)) {
             if (selectedType === 'list') {
                 this.#addContainerInterface(container, 'of'); // List defaults to 'of'
@@ -401,8 +508,67 @@ class TypeEditor {
                 this.#addDictInterface(container);
             }
         }
-        
         this.#notifyChange();
+    }
+
+    #addUnionInterface(container) {
+        this.#addUnionMemberRow(container, { type: '' });
+        this.#addUnionMemberRow(container, { type: '' });
+        this.#updateUnionButtonStates(container);
+    }
+
+    #addUnionMemberRow(container, parsed = { type: '' }) {
+        const itemWrapper = document.createElement('div');
+        itemWrapper.className = 'indented-nested';
+        container.appendChild(itemWrapper);
+
+        const buttonContainer = document.createElement('span');
+        buttonContainer.className = 'nested-leader-container';
+        itemWrapper.appendChild(buttonContainer);
+
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'add-type-btn';
+        addBtn.title = 'Add alternate type (or)';
+        addBtn.textContent = '+';
+        addBtn.addEventListener('click', () => {
+            this.#addUnionMemberRow(container, { type: '' });
+            this.#updateUnionButtonStates(container);
+            this.#notifyChange();
+        });
+        buttonContainer.appendChild(addBtn);
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'remove-type-btn';
+        removeBtn.title = 'Remove this type';
+        removeBtn.textContent = '−';
+        removeBtn.addEventListener('click', () => {
+            const nestedWrappers = [...container.children].filter((child) =>
+                child.classList?.contains('indented-nested')
+            );
+            if (nestedWrappers.length <= 2) { return; }
+            itemWrapper.remove();
+            this.#updateUnionButtonStates(container);
+            this.#notifyChange();
+        });
+        buttonContainer.appendChild(removeBtn);
+
+        this.#buildTypeFromParsed(parsed, itemWrapper);
+        this.#updateUnionButtonStates(container);
+        return itemWrapper;
+    }
+
+    #updateUnionButtonStates(container) {
+        const nestedWrappers = [...container.children].filter((child) =>
+            child.classList?.contains('indented-nested')
+        );
+        nestedWrappers.forEach((wrapper) => {
+            const removeBtn = wrapper.querySelector(':scope > .nested-leader-container > .remove-type-btn');
+            if (removeBtn) {
+                removeBtn.disabled = nestedWrappers.length <= 2;
+            }
+        });
     }
     
     #addCustomInput(container) {
@@ -413,7 +579,8 @@ class TypeEditor {
         input.addEventListener('input', () => {
             this.#notifyChange();
         });
-        container.appendChild(input);
+        this.#ensureTypeBody(container).appendChild(input);
+        this.#placeOptionalToggle(container);
     }
 
     #addSetInterface(container) {
@@ -421,7 +588,8 @@ class TypeEditor {
         const connector = document.createElement('span');
         connector.className = 'connector';
         connector.textContent = 'of';
-        container.appendChild(connector);
+        this.#ensureTypeBody(container).appendChild(connector);
+        this.#placeOptionalToggle(container);
         
         // Wrap nested type in indented container
         const nestedWrapper = document.createElement('div');
@@ -436,7 +604,8 @@ class TypeEditor {
         const connector = document.createElement('span');
         connector.className = 'connector';
         connector.textContent = 'with';
-        container.appendChild(connector);
+        this.#ensureTypeBody(container).appendChild(connector);
+        this.#placeOptionalToggle(container);
         
         // Keys section
         const keysWrapper = document.createElement('div');
@@ -489,7 +658,8 @@ class TypeEditor {
         // Set default
         modeSelect.value = defaultMode;
 
-        container.appendChild(modeSelect);
+        this.#ensureTypeBody(container).appendChild(modeSelect);
+        this.#placeOptionalToggle(container);
 
         // Add change listener
         modeSelect.addEventListener('change', (e) => {
@@ -529,7 +699,7 @@ class TypeEditor {
     }
 
     #getContainerType(container) {
-        const typeSelect = container.querySelector(':scope > select');
+        const typeSelect = this.#mainSelect(container);
         return typeSelect ? typeSelect.value : '';
     }
 
@@ -620,49 +790,57 @@ class TypeEditor {
     }
 
     #generateTypeString(container) {
-        const select = container.querySelector('select');
-        const selectedType = select.value;
-        
+        const select = this.#mainSelect(container);
+        const selectedType = select?.value || '';
+        const body = container.querySelector(':scope > .type-body');
+        let result = '?';
+
         if (!selectedType) {
-            return '?';
-        }
-
-        if (selectedType === 'custom') {
-            const customInput = container.querySelector('.custom-type-input');
+            result = '?';
+        } else if (selectedType === 'custom') {
+            const customInput = body?.querySelector(':scope > .custom-type-input') ||
+                container.querySelector('.custom-type-input');
             if (customInput && this.#isValidCustomTypeName(customInput.value)) {
-                return customInput.value.trim();
+                result = customInput.value.trim();
+            } else {
+                result = '?';
             }
-            return '?';
-        }
-
-        if (this.#baseTypes.includes(selectedType)) {
-            return selectedType;
-        }
-
-        if (selectedType === 'set') {
-            const nestedWrapper = container.querySelector('.indented-nested');
+        } else if (this.#baseTypes.includes(selectedType)) {
+            result = selectedType;
+        } else if (selectedType === 'union') {
+            const nestedWrappers = [...container.children].filter((child) =>
+                child.classList?.contains('indented-nested')
+            );
+            if (nestedWrappers.length > 0) {
+                const members = nestedWrappers.map((wrapper) => {
+                    const typeContainer = wrapper.querySelector(':scope > .type-container');
+                    return typeContainer ? this.#generateTypeString(typeContainer) : '?';
+                });
+                result = this.#dedupeUnionMembers(members);
+            } else {
+                result = '?|?';
+            }
+        } else if (selectedType === 'set') {
+            const nestedWrapper = container.querySelector(':scope > .indented-nested');
             if (nestedWrapper) {
                 const nestedContainer = nestedWrapper.querySelector('.type-container');
                 if (nestedContainer) {
-                    const nestedType = this.#generateTypeString(nestedContainer);
-                    return `set[${nestedType}]`;
+                    result = `set[${this.#generateTypeString(nestedContainer)}]`;
+                } else {
+                    result = 'set[?]';
                 }
+            } else {
+                result = 'set[?]';
             }
-            return 'set[?]';
-        }
-
-        if (selectedType === 'dict') {
-            const nestedWrappers = Array.from(container.children).filter(child => 
-                child.classList && child.classList.contains('indented-nested')
+        } else if (selectedType === 'dict') {
+            const nestedWrappers = [...container.children].filter((child) =>
+                child.classList?.contains('indented-nested')
             );
-            
             let keyType = '?';
             let valueType = '?';
-            
-            nestedWrappers.forEach(wrapper => {
+            nestedWrappers.forEach((wrapper) => {
                 const label = wrapper.querySelector('.dict-label');
                 const typeContainer = wrapper.querySelector('.type-container');
-                
                 if (label && typeContainer) {
                     const typeString = this.#generateTypeString(typeContainer);
                     if (label.textContent === 'keys of') {
@@ -672,57 +850,107 @@ class TypeEditor {
                     }
                 }
             });
-
-            return `dict[${keyType}, ${valueType}]`;
-        }
-
-        if (selectedType === 'list' || selectedType === 'tuple') {
-            const modeSelect = container.querySelector('.mode-select');
+            result = `dict[${keyType}, ${valueType}]`;
+        } else if (selectedType === 'list' || selectedType === 'tuple') {
+            const modeSelect = body?.querySelector(':scope > .mode-select') ||
+                container.querySelector('.mode-select');
             const mode = modeSelect ? modeSelect.value : 'of';
 
             if (mode === 'of') {
-                const nestedWrapper = container.querySelector('.indented-nested');
+                const nestedWrapper = container.querySelector(':scope > .indented-nested');
                 if (nestedWrapper) {
                     const nestedContainer = nestedWrapper.querySelector('.type-container');
                     if (nestedContainer) {
                         const nestedType = this.#generateTypeString(nestedContainer);
-                        if (selectedType === 'tuple') {
-                            return `tuple[${nestedType}, ...]`;
-                        }
-                        return `${selectedType}[${nestedType}]`;
+                        result = selectedType === 'tuple'
+                            ? `tuple[${nestedType}, ...]`
+                            : `${selectedType}[${nestedType}]`;
+                    } else {
+                        result = selectedType === 'tuple' ? 'tuple[?, ...]' : `${selectedType}[?]`;
                     }
+                } else {
+                    result = selectedType === 'tuple' ? 'tuple[?, ...]' : `${selectedType}[?]`;
                 }
-                if (selectedType === 'tuple') {
-                    return 'tuple[?, ...]';
-                }
-                return `${selectedType}[?]`;
             } else {
-                const nestedWrappers = Array.from(container.children).filter(child => 
-                    child.classList && child.classList.contains('indented-nested')
+                const nestedWrappers = [...container.children].filter((child) =>
+                    child.classList?.contains('indented-nested')
                 );
-                
                 if (nestedWrappers.length > 0) {
-                    const types = nestedWrappers.map(wrapper => {
+                    const types = nestedWrappers.map((wrapper) => {
                         const typeContainer = wrapper.querySelector('.type-container');
-                        if (!typeContainer) return '?';
+                        if (!typeContainer) { return '?'; }
                         return this.#generateTypeString(typeContainer);
                     });
-                    return `${selectedType}[${types.join(', ')}]`;
+                    result = `${selectedType}[${types.join(', ')}]`;
+                } else {
+                    result = `${selectedType}[?]`;
                 }
-                return `${selectedType}[?]`;
             }
+        } else {
+            result = selectedType;
         }
 
-        return selectedType;
+        if (this.#isOptionalChecked(container) && result !== '?') {
+            // Append |None unless this level already ends with a top-level None
+            const parts = result.split('|'); // rough; None only at end for our generator
+            if (parts[parts.length - 1] !== 'None') {
+                result = `${result}|None`;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Remove duplicate union arms (order-preserving). A single remaining arm
+     * collapses to that type; all-placeholder arms stay as `?|?`.
+     */
+    #dedupeUnionMembers(members) {
+        const unique = [];
+        const seen = new Set();
+        for (const member of members) {
+            if (seen.has(member)) { continue; }
+            seen.add(member);
+            unique.push(member);
+        }
+        if (unique.length === 0) {
+            return '?|?';
+        }
+        if (unique.length === 1) {
+            return unique[0];
+        }
+        return unique.join('|');
     }
 
     // Private: Parser functions
     #parseTypeString(typeStr) {
-        typeStr = (typeStr || '').trim();
+        typeStr = (typeStr || '').trim().replace(/\s+/g, '');
 
         if (typeStr === '?' || typeStr === '') {
             return { type: '' };
         }
+
+        const splitTopLevelPipes = (text) => {
+            const parts = [];
+            let current = '';
+            let depthBracket = 0;
+            let depthParen = 0;
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (ch === '[') depthBracket++;
+                else if (ch === ']') depthBracket--;
+                else if (ch === '(') depthParen++;
+                else if (ch === ')') depthParen--;
+
+                if (ch === '|' && depthBracket === 0 && depthParen === 0) {
+                    if (current.trim()) { parts.push(current.trim()); }
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+            if (current.trim()) { parts.push(current.trim()); }
+            return parts;
+        };
 
         const splitTopLevelCommas = (text) => {
             const parts = [];
@@ -772,7 +1000,7 @@ class TypeEditor {
             };
         };
 
-        const parsePython = (text) => {
+        const parseAtom = (text) => {
             const { base, inner } = findOuterGeneric(text.trim());
 
             if (inner == null) {
@@ -790,6 +1018,9 @@ class TypeEditor {
                 }
                 if (base === 'dict') {
                     return { type: 'dict', keyType: { type: '' }, valueType: { type: '' } };
+                }
+                if (base === 'union') {
+                    return { type: 'union', types: [{ type: '' }, { type: '' }] };
                 }
 
                 if (this.#allTypes.includes('custom') && (this.#isValidCustomTypeName(base) || base === 'custom')) {
@@ -809,13 +1040,13 @@ class TypeEditor {
                     return {
                         type: 'list',
                         mode: 'of',
-                        nested: args.length === 1 ? parsePython(args[0]) : { type: '' }
+                        nested: args.length === 1 ? parseWithOptional(args[0]) : { type: '' }
                     };
                 }
                 return {
                     type: 'list',
                     mode: 'with',
-                    types: args.map(parsePython)
+                    types: args.map(parseWithOptional)
                 };
             }
 
@@ -823,7 +1054,7 @@ class TypeEditor {
                 return {
                     type: 'set',
                     mode: 'of',
-                    nested: args.length ? parsePython(args[0]) : { type: '' }
+                    nested: args.length ? parseWithOptional(args[0]) : { type: '' }
                 };
             }
 
@@ -832,28 +1063,69 @@ class TypeEditor {
                     return {
                         type: 'tuple',
                         mode: 'of',
-                        nested: parsePython(args[0])
+                        nested: parseWithOptional(args[0])
                     };
                 }
                 return {
                     type: 'tuple',
                     mode: 'with',
-                    types: args.length ? args.map(parsePython) : [{ type: '' }, { type: '' }]
+                    types: args.length ? args.map(parseWithOptional) : [{ type: '' }, { type: '' }]
                 };
             }
 
             if (base === 'dict') {
                 return {
                     type: 'dict',
-                    keyType: args[0] ? parsePython(args[0]) : { type: '' },
-                    valueType: args[1] ? parsePython(args[1]) : { type: '' }
+                    keyType: args[0] ? parseWithOptional(args[0]) : { type: '' },
+                    valueType: args[1] ? parseWithOptional(args[1]) : { type: '' }
                 };
             }
 
             throw new Error(`Unsupported generic type: ${base}`);
         };
 
-        return parsePython(typeStr);
+        const parseWithOptional = (text) => {
+            const parts = splitTopLevelPipes(text.trim());
+            const others = parts.filter((p) => p.toLowerCase() !== 'none');
+            const hasNone = others.length < parts.length;
+            let node;
+            if (others.length === 0) {
+                node = { type: '' };
+            } else if (others.length > 1) {
+                if (this.#allowUnionTypes) {
+                    // Direct union members are never optional / nested unions —
+                    // parse each arm as an atom (nested unions only inside containers).
+                    node = {
+                        type: 'union',
+                        types: others.map((part) => {
+                            const member = parseAtom(part);
+                            delete member.optional;
+                            return member;
+                        })
+                    };
+                } else if (this.#allTypes.includes('custom')) {
+                    node = { type: 'custom', customValue: others.join('|') };
+                } else {
+                    throw new Error('Union types are not enabled');
+                }
+            } else {
+                node = parseAtom(others[0]);
+            }
+            if (hasNone) {
+                if (this.#allowOptionalTypes) {
+                    node.optional = true;
+                } else if (node.type === 'union') {
+                    node.types.push({ type: 'custom', customValue: 'None' });
+                } else if (this.#allTypes.includes('custom')) {
+                    node = { type: 'custom', customValue: text.trim() };
+                } else {
+                    node.optional = true; // best-effort display
+                }
+            }
+            return node;
+        };
+
+        return parseWithOptional(typeStr);
     }
 
     #buildTypeFromParsed(parsed, parentElement) {
@@ -864,69 +1136,95 @@ class TypeEditor {
 
         const select = document.createElement('select');
         
-        // Add placeholder option first
         const placeholderOption = document.createElement('option');
         placeholderOption.value = '';
         placeholderOption.textContent = 'type';
         select.appendChild(placeholderOption);
-        
-        // Determine which types to show based on context
-        const inSetContext = this.#needsImmutableTypes(parentElement);
-        const immutableTypes = [...this.#baseTypes, 'tuple'];
-        const typesToShow = inSetContext ? immutableTypes : this.#allTypes;
 
-        typesToShow.forEach(type => {
+        this.#typesToShow(parentElement).forEach((type) => {
             const option = document.createElement('option');
             option.value = type;
             option.textContent = type;
             select.appendChild(option);
         });
 
-        select.value = parsed.type;
+        // Ensure parsed type is selectable (e.g. union when enabled)
+        if (parsed.type && ![...select.options].some((o) => o.value === parsed.type)) {
+            if (parsed.type === 'custom' || this.#allTypes.includes('custom')) {
+                // fall through — custom handled below
+            } else {
+                const option = document.createElement('option');
+                option.value = parsed.type;
+                option.textContent = parsed.type;
+                select.appendChild(option);
+            }
+        }
+
+        select.value = parsed.type === 'custom' ? 'custom' : (parsed.type || '');
         
-        // Add change event listener so dropdowns work after parsing
         select.addEventListener('change', (e) => {
-            // Only handle change if a valid type is selected
             if (e.target.value) {
                 this.#handleTypeChange(e, container, id);
             } else {
-                // Clear nested elements if placeholder is selected
-                const childElements = container.querySelectorAll('.type-container:not(:first-child), .mode-select, .connector, .add-type-btn, .remove-type-btn, .indented-nested, .dict-label, .dict-connector, .custom-type-input');
-                childElements.forEach(el => el.remove());
+                this.#clearContainerExtras(container);
                 this.#notifyChange();
             }
         });
-        
-        container.appendChild(select);
+
+        const body = this.#ensureTypeBody(container);
+        body.appendChild(select);
+        this.#addOptionalToggle(container, Boolean(parsed.optional), parentElement);
         parentElement.appendChild(container);
 
-        // Handle custom type
         if (parsed.type === 'custom') {
             this.#addCustomInput(container);
-            const customInput = container.querySelector('.custom-type-input');
+            const customInput = body.querySelector('.custom-type-input');
             if (customInput && parsed.customValue) {
                 customInput.value = parsed.customValue;
             }
-        }
-        // Handle container-specific setup
-        else if (parsed.type === 'set') {
+        } else if (parsed.type === 'union') {
+            // Flatten any accidental nested unions into sibling arms
+            const rawMembers = (parsed.types && parsed.types.length >= 2)
+                ? parsed.types
+                : [{ type: '' }, { type: '' }];
+            const members = [];
+            for (const typeObj of rawMembers) {
+                if (typeObj?.type === 'union' && Array.isArray(typeObj.types)) {
+                    for (const nested of typeObj.types) {
+                        const arm = { ...nested };
+                        delete arm.optional;
+                        members.push(arm);
+                    }
+                } else {
+                    const arm = { ...typeObj };
+                    delete arm.optional;
+                    members.push(arm);
+                }
+            }
+            while (members.length < 2) { members.push({ type: '' }); }
+            members.forEach((typeObj) => {
+                this.#addUnionMemberRow(container, typeObj);
+            });
+            this.#updateUnionButtonStates(container);
+        } else if (parsed.type === 'set') {
             const connector = document.createElement('span');
             connector.className = 'connector';
             connector.textContent = 'of';
-            container.appendChild(connector);
+            body.appendChild(connector);
+            this.#placeOptionalToggle(container);
             
             const nestedWrapper = document.createElement('div');
             nestedWrapper.className = 'indented-nested';
             container.appendChild(nestedWrapper);
             
-            this.#buildTypeFromParsed(parsed.nested, nestedWrapper);
+            this.#buildTypeFromParsed(parsed.nested || { type: '' }, nestedWrapper);
         } else if (parsed.type === 'dict') {
             const connector = document.createElement('span');
             connector.className = 'connector';
             connector.textContent = 'with';
-            container.appendChild(connector);
+            body.appendChild(connector);
+            this.#placeOptionalToggle(container);
             
-            // Keys section
             const keysWrapper = document.createElement('div');
             keysWrapper.className = 'indented-nested';
             container.appendChild(keysWrapper);
@@ -936,15 +1234,13 @@ class TypeEditor {
             keysLabel.textContent = 'keys of';
             keysWrapper.appendChild(keysLabel);
             
-            this.#buildTypeFromParsed(parsed.keyType, keysWrapper);
+            this.#buildTypeFromParsed(parsed.keyType || { type: '' }, keysWrapper);
             
-            // "associated with" on its own line
             const associatedWith = document.createElement('div');
             associatedWith.className = 'dict-connector';
             associatedWith.textContent = 'associated with';
             container.appendChild(associatedWith);
             
-            // Values section
             const valuesWrapper = document.createElement('div');
             valuesWrapper.className = 'indented-nested';
             container.appendChild(valuesWrapper);
@@ -954,7 +1250,7 @@ class TypeEditor {
             valuesLabel.textContent = 'values of';
             valuesWrapper.appendChild(valuesLabel);
             
-            this.#buildTypeFromParsed(parsed.valueType, valuesWrapper);
+            this.#buildTypeFromParsed(parsed.valueType || { type: '' }, valuesWrapper);
         } else if (parsed.type === 'list' || parsed.type === 'tuple') {
             const modeSelect = document.createElement('select');
             modeSelect.className = 'mode-select';
@@ -971,28 +1267,27 @@ class TypeEditor {
             withOption.title = 'Contains a fixed number of elements, each of a possiblydifferent type';
             modeSelect.appendChild(withOption);
 
-            modeSelect.value = parsed.mode;
+            modeSelect.value = parsed.mode || (parsed.type === 'tuple' ? 'with' : 'of');
             
-            // Add change event listener so mode selection works after parsing
             modeSelect.addEventListener('change', (e) => {
                 this.#updateContainerMode(container, e.target.value);
                 this.#updateModeWarning(container, this.#getContainerType(container), e.target.value);
             });
             
-            container.appendChild(modeSelect);
-            this.#updateModeWarning(container, parsed.type, parsed.mode);
+            body.appendChild(modeSelect);
+            this.#placeOptionalToggle(container);
+            this.#updateModeWarning(container, parsed.type, modeSelect.value);
 
-            if (parsed.mode === 'of') {
+            if (modeSelect.value === 'of') {
                 const nestedWrapper = document.createElement('div');
                 nestedWrapper.className = 'indented-nested';
                 container.appendChild(nestedWrapper);
                 
-                this.#buildTypeFromParsed(parsed.nested, nestedWrapper);
+                this.#buildTypeFromParsed(parsed.nested || { type: '' }, nestedWrapper);
             } else {
-                // "with" mode
-                const withTypes = parsed.types.length >= 2
+                const withTypes = (parsed.types && parsed.types.length >= 2)
                     ? parsed.types
-                    : [...parsed.types, ...Array(2 - parsed.types.length).fill({ type: '' })];
+                    : [...(parsed.types || []), ...Array(Math.max(0, 2 - (parsed.types || []).length)).fill({ type: '' })];
 
                 withTypes.forEach((typeObj) => {
                     const itemWrapper = document.createElement('div');

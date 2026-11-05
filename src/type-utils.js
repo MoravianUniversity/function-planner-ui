@@ -3,6 +3,16 @@
  * the planner's English-like display text.
  */
 
+import {
+    isOptionalType,
+    stripOptional,
+    withOptional,
+    splitTopLevelUnion,
+    normalizeTypeAnnotationString
+} from '@function-planner/shared';
+
+export { isOptionalType, stripOptional, withOptional, splitTopLevelUnion, normalizeTypeAnnotationString };
+
 const BASE_TYPES = new Set(['int', 'float', 'str', 'bool']);
 const CONTAINER_TYPES = new Set(['list', 'tuple', 'set', 'dict']);
 
@@ -13,7 +23,8 @@ function normalizeString(text) {
 function parsePythonType(src) {
     if (!src || src === '?') { return { type: '' }; }
 
-    const parseAt = (start = 0) => {
+    /** Parse one non-union type atom (name or Name[...]). */
+    const parseAtom = (start = 0) => {
         let i = start;
         const nameMatch = /^[A-Za-z_][A-Za-z0-9_.]*/.exec(src.slice(i));
         if (!nameMatch) {
@@ -22,18 +33,6 @@ function parsePythonType(src) {
         const rawName = nameMatch[0];
         const name = rawName.toLowerCase();
         i += rawName.length;
-
-        // Handle union types with '|'
-        if (src[i] === '|') {
-            const types = [{ type: name }];
-            while (src[i] === '|') {
-                i++; // skip '|'
-                const [nextType, nextPos] = parseAt(i);
-                types.push(nextType);
-                i = nextPos;
-            }
-            return [{ type: 'union', types }, i];
-        }
 
         // Bare names
         if (src[i] !== '[') {
@@ -90,11 +89,56 @@ function parsePythonType(src) {
         return [{ type: 'custom', customValue: `${rawName}[${args.map(astToPython).join(', ')}]` }, i];
     };
 
+    /** Parse a type, allowing top-level `|` unions. */
+    const parseAt = (start = 0) => {
+        let [first, i] = parseAtom(start);
+        if (src[i] !== '|') {
+            return [first, i];
+        }
+        const types = [first];
+        while (src[i] === '|') {
+            i++; // skip '|'
+            const [nextType, nextPos] = parseAtom(i);
+            types.push(nextType);
+            i = nextPos;
+        }
+        return [{ type: 'union', types }, i];
+    };
+
     const [parsed, end] = parseAt(0);
     if (src.length !== end) {
         throw new Error(`Unexpected trailing tokens (position ${end}, got: ${src.slice(end)})`);
     }
     return parsed;
+}
+
+function astToPython(ast) {
+    if (!ast || !ast.type) { return '?'; }
+    if (ast.type === 'custom') { return ast.customValue || '?'; }
+    if (ast.type === 'union') {
+        return (ast.types || []).map(astToPython).join('|');
+    }
+    if (ast.type === 'ellipsis') { return '...'; }
+    if (BASE_TYPES.has(ast.type)) { return ast.type; }
+    if (ast.type === 'list') {
+        if (ast.mode === 'with') {
+            return `list[${(ast.types || []).map(astToPython).join(', ')}]`;
+        }
+        return `list[${astToPython(ast.nested)}]`;
+    }
+    if (ast.type === 'set') {
+        return `set[${astToPython(ast.nested)}]`;
+    }
+    if (ast.type === 'tuple') {
+        if (ast.mode === 'of') {
+            return `tuple[${astToPython(ast.nested)}, ...]`;
+        }
+        return `tuple[${(ast.types || []).map(astToPython).join(', ')}]`;
+    }
+    if (ast.type === 'dict') {
+        return `dict[${astToPython(ast.keyType)}, ${astToPython(ast.valueType)}]`;
+    }
+    return ast.type;
 }
 
 /**

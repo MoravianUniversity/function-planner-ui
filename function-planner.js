@@ -109,6 +109,9 @@ function scrollMinimallyToShow(diagram, bounds) {
  * @param {boolean} [options.showTestGlobalCode] Show test global code editor (default: false)
  * @param {string} [options.showCodeFor] Regex of function names that show function code (default: "")
  * @param {string} [options.showTestCodeFor] Regex of function names that show test code (default: "")
+ * @param {boolean} [options.allowOptionalTypes] Allow marking params/returns optional (`T|None`) via toggle (default: false)
+ * @param {boolean} [options.allowUnionTypes] Allow editing union types in the type editor (default: false)
+ * @param {boolean} [options.allowParamDefaults] Allow param default values via = toggle (default: false)
  * @param {boolean|string[]} [options.moduleReadOnly] Module field read-only policy (true=all, false=none, or field names)
  * @param {{ for: string, fields: true|string[] }[]} [options.functionReadOnly] Per-function read-only rules (regex + fields)
  * @param {string[]|null} [options.externalAuthors] When non-null (collaborative hosts),

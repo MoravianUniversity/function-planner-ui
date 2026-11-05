@@ -150,8 +150,15 @@ const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 function letter(n) { return ALPHABET.charAt(n % ALPHABET.length); }
 function getParam(param, i, withTypes=true) {
     let name = (param.name || letter(i)).trim();
-    if (!withTypes || !param.type) { return name; }
-    return `${name}: ${param.type}`;
+    const def = (param.default ?? '').toString().trim();
+    let result = name;
+    if (withTypes && param.type) {
+        result = `${name}: ${param.type}`;
+    }
+    if (def) {
+        result = `${result} = ${def}`;
+    }
+    return result;
 }
 /**
  * Generates a Python function definition line.
