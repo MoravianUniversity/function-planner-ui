@@ -5,6 +5,8 @@
  * The exported functions are:
  *  - setupDragAndDrop(model, options={}, div)
  *  - pythonDefLine(name, params, returns, withTypes=true, simple=false)
+ *  - generatePythonFromFunctionJSON(funcData, options, extra)
+ *  - generatePythonForFunction(model, key, options, withTypes=true, showOwner=false)
  *  - exportToPython(model, options, withTypes=true)
  *  - exportPythonTests(model, options)
  *  - reset(model, options, confirm=true)
@@ -366,6 +368,80 @@ function sortFunctions(model, functions) {
     const funcMap = Object.fromEntries(functions);
     return sortedKeys.map(key => [key, funcMap[key]]).filter(([key, func]) => func);
 }
+
+/**
+ * Generate a Python stub from plain function JSON (no Yjs).
+ * @param {object} funcData
+ * @param {object} [options]
+ * @param {object} [extra]
+ * @param {boolean} [extra.withTypes=true]
+ * @param {boolean} [extra.showOwner=false]
+ * @param {string} [extra.fallbackName='function']
+ * @param {string[]} [extra.calledNames=[]] callee names for `# Calls` comments
+ * @returns {string}
+ */
+export function generatePythonFromFunctionJSON(funcData, options={}, extra={}) {
+    const withTypes = extra.withTypes !== false;
+    const showOwner = Boolean(extra.showOwner);
+    const fallbackName = extra.fallbackName ?? 'function';
+    const calledNames = extra.calledNames || [];
+
+    const name = funcData.name?.toString() || fallbackName;
+    const params = Array.isArray(funcData.params) ? funcData.params : [];
+    const returns = Array.isArray(funcData.returns) ? funcData.returns : [];
+    let funcText = pythonDefLine(name, params, returns, withTypes) + "\n";
+
+    const desc = funcData.desc?.toString() || "";
+    const owner = funcData.owner?.toString() || "";
+    const ownerLabel = (showOwner && owner) ? authorLabel(options, owner) : '';
+    if (desc || ownerLabel) { funcText += pythonDocstring(desc, options, params, returns, ownerLabel); }
+
+    const code = funcData.code?.toString() || "";
+    if (code) {
+        funcText += indentText(code, 4);
+    } else {
+        funcText += "    # TODO: implement this function\n";
+        if (calledNames.length > 0) {
+            funcText += `    # Calls ${calledNames.map(call => call + "()").join(", ")}\n`;
+        }
+        const io = funcData.io || "none";
+        if (io === "validation") { funcText += `    # Has direct user input that requires validation\n`; }
+        else if (io === "input") { funcText += `    # Has direct user input\n`; }
+        else if (io === "output") { funcText += `    # Has direct user output\n`; }
+
+        if (returns.length > 0) {
+            funcText += `    return ${returns.map(ret => defaultReturnValue(ret.type)).join(", ")}`;
+        } else {
+            funcText += "    pass";
+        }
+    }
+
+    return funcText.replace(/[ \t\f\v]+$/gm, '');
+}
+
+/**
+ * Generate a Python stub for a single function (def line, optional docstring, body).
+ * @param {*} model
+ * @param {string} key function key
+ * @param {object} options
+ * @param {boolean} [withTypes=true]
+ * @param {boolean} [showOwner=false] Include owner in the docstring when set
+ * @returns {string|null} Python text, or null if the function is missing
+ */
+export function generatePythonForFunction(model, key, options={}, withTypes=true, showOwner=false) {
+    const func = model.functions.get(key);
+    if (!func) { return null; }
+    const calledNames = (model.calledFunctions[key] || []).map(
+        toKey => model.functions.get(toKey)?.get("name")?.toString() || `function${toKey}`
+    );
+    return generatePythonFromFunctionJSON(func.toJSON(), options, {
+        withTypes,
+        showOwner,
+        fallbackName: `function${key}`,
+        calledNames,
+    });
+}
+
 function generatePythonTemplate(model, options, authors=null, withTypes=true) {
     const data = model.modelData.toJSON();
     const { by, functions, showOwners, includeAll } = dealWithAuthors(model, authors, options);
@@ -376,44 +452,10 @@ function generatePythonTemplate(model, options, authors=null, withTypes=true) {
     let hasMainFunc = false;
 
     for (const [key, func] of funcs) {
-        // Create the def line
         const name = func.get("name")?.toString() || `function${key}`;
         if (name === 'main') { hasMainFunc = true; }
-        const params = func.get("params")?.toJSON() || [];
-        const returns = func.get("returns")?.toJSON() || [];
-        let funcText = pythonDefLine(name, params, returns, withTypes) + "\n";
-
-        // Create the docstring (include owner when combined/multi-author and not shared)
-        const desc = func.get("desc")?.toString() || "";
-        const owner = func.get("owner")?.toString() || "";
-        const ownerLabel = (showOwners && owner) ? authorLabel(options, owner) : '';
-        if (desc || ownerLabel) { funcText += pythonDocstring(desc, options, params, returns, ownerLabel); }
-
-        const code = func.get("code")?.toString() || "";
-        if (code) {
-            // Pre-provided code if available
-            funcText += indentText(code, 4);
-        } else {
-            // Body comments
-            funcText += "    # TODO: implement this function\n";
-            const calls = model.calledFunctions[key]?.map(
-                toKey => model.functions.get(toKey)?.get("name")?.toString() || `function${toKey}`
-            );
-            if (calls?.length > 0) { funcText += `    # Calls ${calls.map(call => call + "()").join(", ")}\n`; }
-            const io = func.get("io") || "none";
-            if (io === "validation") { funcText += `    # Has direct user input that requires validation\n`; }
-            else if (io === "input") { funcText += `    # Has direct user input\n`; }
-            else if (io === "output") { funcText += `    # Has direct user output\n`; }
-
-            // Dummy return statement
-            if (returns.length > 0) {
-                funcText += `    return ${returns.map(ret => defaultReturnValue(ret.type)).join(", ")}`;
-            } else {
-                funcText += "    pass";
-            }
-        }
-
-        text += funcText + "\n\n\n";
+        const funcText = generatePythonForFunction(model, key, options, withTypes, showOwners);
+        if (funcText) { text += funcText + "\n\n\n"; }
     }
     if (hasMainFunc) { text += 'if __name__ == "__main__":\n    main()\n'; }
     text = text.replace(/[ \t\f\v]+$/gm, '');  // remove all trailing whitespace

@@ -16,6 +16,7 @@ import { setupInspector } from './src/inspector.js';
 import { makeFunctionInspector } from './src/function-inspector.js';
 import { makeModuleInspector } from './src/module-inspector.js';
 import { setupEditingPresence } from './src/editing-presence.js';
+import { setupFunctionClipboard } from './src/function-clipboard.js';
 
 import './function-planner.css';
 
@@ -177,6 +178,7 @@ export default function init(
     });
     const diagram = setupDiagram(rootElem, model, options);
     makeAllButtons(diagram, model, options);
+    setupFunctionClipboard(diagram, model, options, rootElem);
     if (!options.collaborative) {
         setupDragAndDrop(model, options, diagram.div);
     }

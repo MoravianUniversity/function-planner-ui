@@ -884,6 +884,41 @@ div:where(.swal2-container) img:where(.swal2-image) { margin: 2em auto 0 !import
     display: block;
 }
 
+/* Node context menu (copy / paste) */
+.func-planner .func-planner-context-menu {
+    position: absolute;
+    z-index: 300;
+    display: none;
+    flex-direction: column;
+    min-width: 7.5rem;
+    padding: 0.25rem 0;
+    margin: 0;
+    border: 1px solid var(--stroke-color);
+    border-radius: 6px;
+    background: var(--tool-background-color);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.func-planner .func-planner-context-menu-item {
+    display: block;
+    width: 100%;
+    padding: 0.4rem 0.85rem;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    font: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    cursor: pointer;
+}
+.func-planner .func-planner-context-menu-item:hover:not(:disabled) {
+    background: var(--button-color);
+    color: var(--button-text-color);
+}
+.func-planner .func-planner-context-menu-item:disabled {
+    color: var(--placeholder-color);
+    cursor: not-allowed;
+}
+
 /* SweetAlert2 Python import file fields */
 .func-planner-python-import-file {
     display: flex;
