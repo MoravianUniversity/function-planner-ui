@@ -280,10 +280,10 @@ function funcLinkProblems(model, key) {
     return problems;
 }
 
-function funcIOProblems(model, key, func) { // func must be a JSON object
+function funcIOProblems(model, key, func, options = {}) { // func must be a JSON object
     const problems = [];
     const io = func.io || 'none';
-    if (func.name?.trim() === 'main') {
+    if (func.name?.trim() === 'main' && (options.mainShouldNotHaveIO ?? true)) {
         if (!['none', 'indirect'].includes(io)) { problems.push(["warning", "io", "Main function should not have any direct user input or output."]); }
     }
     if (func.testable && io !== 'none') { problems.push(["error", "testable,io", "We cannot test functions that have direct or indirect user input or output."]); }
@@ -302,7 +302,7 @@ function treeHasIO(model, key, checked = new Set()) {
     if (io && ['validation', 'input', 'output'].includes(io)) { return true; }
     return Array.from(model.calledFunctions[key] || []).some(child => treeHasIO(model, child, checked));
 }
-function funcIOProblemsUpdate(model, key) {
+function funcIOProblemsUpdate(model, key, options = {}) {
     const funcObj = model.functions.get(key);
     // if we are loading a complete model right now, then some functions  might not exist when we
     // try to update their problems, so we just skip those updates since they will be updated again
@@ -310,7 +310,7 @@ function funcIOProblemsUpdate(model, key) {
     if (!funcObj) { return; }
     const func = model.functions.get(key).toJSON();
     const curProblems = model.getFuncProblems(key);
-    const ioProblems = funcIOProblems(model, key, func);
+    const ioProblems = funcIOProblems(model, key, func, options);
     const newProblems = curProblems.filter(p => !p[1].split(',').includes('io')).concat(ioProblems);
     if (!deepEquals(curProblems, newProblems)) { model.setFuncProblems(key, newProblems); }
 }
@@ -326,7 +326,7 @@ function funcIOProblemsUpdateParents(model, key, options = {}, visited = new Set
     if (options.callGraphOnly) { return; } // no I/O problem checking
     if (visited.has(key)) { return; } // avoid infinite recursion
     visited.add(key);
-    funcIOProblemsUpdate(model, key);
+    funcIOProblemsUpdate(model, key, options);
     for (const parent of model.callingFunctions[key] || []) {
         funcIOProblemsUpdateParents(model, parent, options, visited);
     }
@@ -452,6 +452,6 @@ function funcProblems(model, key, options={}, fix=false) {
         const authors = model.modelData.get('authors')?.toJSON() || [];
         if (!authors.includes(func.owner)) { problems.push(["error", "owner", "Function owner must be one of the module authors."]); }
     }
-    problems.push(...funcIOProblems(model, key, func));
+    problems.push(...funcIOProblems(model, key, func, options));
     return problems;
 }

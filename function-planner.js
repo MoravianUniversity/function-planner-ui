@@ -112,6 +112,7 @@ function scrollMinimallyToShow(diagram, bounds) {
  * @param {boolean} [options.allowOptionalTypes] Allow marking params/returns optional (`T|None`) via toggle (default: false)
  * @param {boolean} [options.allowUnionTypes] Allow editing union types in the type editor (default: false)
  * @param {boolean} [options.allowParamDefaults] Allow param default values via = toggle (default: false)
+ * @param {boolean} [options.mainShouldNotHaveIO] Warn if main has direct I/O (default: true)
  * @param {boolean|string[]} [options.moduleReadOnly] Module field read-only policy (true=all, false=none, or field names)
  * @param {{ for: string, fields: true|string[] }[]} [options.functionReadOnly] Per-function read-only rules (regex + fields)
  * @param {string[]|null} [options.externalAuthors] When non-null (collaborative hosts),
@@ -158,6 +159,7 @@ export default function init(
     options.showTestGlobalCode = options.showTestGlobalCode ?? false;
     options.showCodeFor = options.showCodeFor ?? '';
     options.showTestCodeFor = options.showTestCodeFor ?? '';
+    options.mainShouldNotHaveIO = options.mainShouldNotHaveIO ?? true;
     options.moduleReadOnly = options.moduleReadOnly ?? false;
     options.functionReadOnly = options.functionReadOnly ?? [];
     options.extraFabs = options.extraFabs ?? [];
