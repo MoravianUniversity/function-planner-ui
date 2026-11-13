@@ -1,4 +1,4 @@
-import{t as e}from"./function-planner-Cb5Ef3SH.js";var t={functions:[{key:1,name:`main`,io:`indirect`,code:`# Get the random word from the list of words
+import{t as e}from"./function-planner-CZj02iZW.js";var t={functions:[{key:1,name:`main`,io:`indirect`,code:`# Get the random word from the list of words
 word = select_word()
 # Play the game and print out the final results
 if play_game(word):

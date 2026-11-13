@@ -1,1 +1,0 @@
-import{t as e}from"./function-planner-Cb5Ef3SH.js";window.addEventListener(`DOMContentLoaded`,()=>{e(`planner`,`madlibs`,{title:`Mad Libs`,minFunctions:10,minTestable:2})});
