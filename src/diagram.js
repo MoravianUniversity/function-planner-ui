@@ -250,6 +250,7 @@ export function setupDiagram(
     const paddingHoriz = 75, paddingVert = 30;
     const diagram = new go.Diagram(diagramDiv, {
         allowCopy: false,
+        allowClipboard: false, // custom function copy/paste in function-clipboard.js
         allowMove: !globalReadonly,
         allowSelect: true,
         allowDelete: !globalReadonly,

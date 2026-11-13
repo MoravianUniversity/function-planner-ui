@@ -397,6 +397,7 @@ function makeContextMenu(diagram, model, options, rootElem) {
     pasteBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        // Always add a new function — never modify/replace the node under the cursor.
         void pasteFunctions(model, options).then(() => {
             diagram.toolManager.contextMenuTool.stopTool();
         });
@@ -406,9 +407,17 @@ function makeContextMenu(diagram, model, options, rootElem) {
         mainElement: menu,
         show: (obj, diag, _tool) => {
             currentNode = obj?.part instanceof go.Node && !obj.part.data?.isGroup ? obj.part : null;
+            const canPaste = !isGlobalReadonly(options);
+            // Copy only on a function node; Paste on node or diagram background.
+            copyBtn.style.display = currentNode ? '' : 'none';
             copyBtn.disabled = !currentNode;
-            pasteBtn.disabled = isGlobalReadonly(options);
-            pasteBtn.style.display = isGlobalReadonly(options) ? 'none' : '';
+            pasteBtn.disabled = !canPaste;
+            pasteBtn.style.display = canPaste ? '' : 'none';
+
+            if (!currentNode && !canPaste) {
+                menu.style.display = 'none';
+                return null;
+            }
 
             const mouse = diag.lastInput.viewPoint;
             menu.style.display = 'flex';
@@ -424,7 +433,7 @@ function makeContextMenu(diagram, model, options, rootElem) {
 }
 
 /**
- * Install copy/paste listeners and a node context menu.
+ * Install copy/paste listeners and context menus (node + diagram background).
  * @param {go.Diagram} diagram
  * @param {*} model
  * @param {object} options
@@ -434,7 +443,9 @@ export function setupFunctionClipboard(diagram, model, options={}, rootElem=null
     const root = rootElem || diagram.div?.parentElement || document.body;
     const isMac = isMacOS();
 
-    diagram.nodeTemplate.contextMenu = makeContextMenu(diagram, model, options, root);
+    const contextMenu = makeContextMenu(diagram, model, options, root);
+    diagram.nodeTemplate.contextMenu = contextMenu;
+    diagram.contextMenu = contextMenu;
 
     const onCopy = (e) => {
         if (isEditingText()) {
@@ -450,9 +461,7 @@ export function setupFunctionClipboard(diagram, model, options={}, rootElem=null
         if (isEditingText() || isGlobalReadonly(options)) {
             return;
         }
-        // Always try; if clipboard has no function payload, leave browser default alone.
         const data = e.clipboardData;
-        // Peek synchronously for our MIME or lastCopied matching plain text.
         const mime = data?.getData(FUNCTION_CLIPBOARD_MIME) || '';
         const plain = data?.getData('text/plain') || '';
         const hasMime = Boolean(parseEnvelopeJson(mime));
@@ -469,16 +478,25 @@ export function setupFunctionClipboard(diagram, model, options={}, rootElem=null
         if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey) {
             return;
         }
-        // Cmd/Ctrl+C: write ourselves (GoJS / empty selection may not fire a useful copy).
-        // Paste is handled by the paste event so we do not double-insert.
-        if (e.key.toLowerCase() !== 'c') {
+        // Same global capture pattern as undo/add in buttons.js — GoJS otherwise eats keys.
+        if (isEditingText()) {
             return;
         }
-        if (isEditingText() || !selectedFunctionNode(diagram)) {
-            return;
+        const key = e.key.toLowerCase();
+        if (key === 'c') {
+            if (!selectedFunctionNode(diagram)) {
+                return;
+            }
+            e.preventDefault();
+            copySelectedFunction(diagram, model, options);
+        } else if (key === 'v') {
+            if (isGlobalReadonly(options)) {
+                return;
+            }
+            // GoJS captures Cmd/Ctrl+V before a paste event fires; paste via addFunc only.
+            e.preventDefault();
+            void pasteFunctions(model, options);
         }
-        e.preventDefault();
-        copySelectedFunction(diagram, model, options);
     };
 
     document.addEventListener('copy', onCopy, true);
